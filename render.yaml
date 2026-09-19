@@ -1,0 +1,24 @@
+# Развёртывание Fraud Hunter на Render одним сервисом:
+# FastAPI отдаёт и API, и фронтенд.
+#
+# Данные и модель не хранятся в репозитории — они генерируются и обучаются
+# на этапе сборки. Так репозиторий остаётся лёгким, а модель всегда
+# соответствует текущему коду признаков.
+services:
+  - type: web
+    name: fraud-hunter
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      python -m ml.generate_data
+      python -m ml.train
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: PYTHONUNBUFFERED
+        value: "1"

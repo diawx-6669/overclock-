@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.DS_Store
+.ipynb_checkpoints/
+data/*.csv
+data/*.parquet
+!data/.gitkeep
+models/*.pkl
+models/*.joblib
+!models/.gitkeep
+
+# метрики пересчитываются при каждом обучении
+models/metrics.json

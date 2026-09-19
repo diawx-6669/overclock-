@@ -1,0 +1,1268 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fraud Hunter</title>
+<style>
+  :root{
+    --bg:#0a0e16; --panel:#121a27; --panel2:#0f1621; --line:#1e2a3c;
+    --text:#e9eef7; --muted:#8497b3; --dim:#5b6b85;
+    --allow:#22c55e; --stepup:#eab308; --hold:#f97316; --block:#ef4444;
+    --primary:#4f8ef7; --accent:#a78bfa;
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--primary)}
+  .wrap{max-width:1360px;margin:0 auto;padding:0 20px 64px}
+
+  /* ---------- шапка ---------- */
+  header{
+    position:sticky;top:0;z-index:50;background:rgba(10,14,22,.88);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+  }
+  .head{max-width:1360px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .logo{display:flex;align-items:center;gap:11px;font-weight:700;font-size:18px;letter-spacing:-.2px}
+  .logo .dot{width:11px;height:11px;border-radius:50%;background:var(--allow);box-shadow:0 0 0 4px rgba(34,197,94,.16)}
+  .tagline{color:var(--muted);font-size:13px;font-weight:400;margin-left:2px}
+  nav{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+  nav button{
+    background:transparent;border:1px solid transparent;color:var(--muted);
+    padding:7px 13px;border-radius:9px;cursor:pointer;font-size:14px;font-family:inherit;
+  }
+  nav button:hover{color:var(--text);background:var(--panel)}
+  nav button.on{background:var(--panel);color:var(--text);border-color:var(--line)}
+  .langs{display:flex;gap:3px;border:1px solid var(--line);border-radius:9px;padding:3px}
+  .langs button{
+    background:transparent;border:0;color:var(--dim);padding:4px 9px;border-radius:6px;
+    cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;
+  }
+  .langs button.on{background:var(--primary);color:#fff}
+
+  /* ---------- общее ---------- */
+  h2{font-size:19px;margin:30px 0 4px;letter-spacing:-.2px}
+  h3{font-size:15px;margin:0 0 12px;color:var(--text)}
+  .sub{color:var(--muted);font-size:13.5px;margin:0 0 18px;max-width:78ch}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+  .grid{display:grid;gap:14px}
+  .hide{display:none !important}
+  .muted{color:var(--muted)}
+  .dim{color:var(--dim)}
+  .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+  /* ---------- карточки показателей ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:12px;margin:18px 0}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:15px 16px}
+  .kpi .k{color:var(--muted);font-size:12.5px;margin-bottom:7px;line-height:1.35}
+  .kpi .v{font-size:25px;font-weight:700;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+  .kpi .n{color:var(--dim);font-size:11.5px;margin-top:5px}
+  .kpi.good .v{color:var(--allow)} .kpi.warn .v{color:var(--stepup)}
+  .kpi.hot .v{color:var(--hold)} .kpi.bad .v{color:var(--block)}
+
+  /* ---------- значки действий ---------- */
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;
+    font-size:12px;font-weight:600;white-space:nowrap}
+  .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .b-allow{background:rgba(34,197,94,.13);color:var(--allow)}
+  .b-step_up{background:rgba(234,179,8,.13);color:var(--stepup)}
+  .b-hold{background:rgba(249,115,22,.14);color:var(--hold)}
+  .b-block{background:rgba(239,68,68,.13);color:var(--block)}
+
+  /* ---------- таблицы ---------- */
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;color:var(--muted);font-weight:500;font-size:12px;padding:9px 10px;
+     border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:10px;border-bottom:1px solid rgba(30,42,60,.55);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:rgba(79,142,247,.045)}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+
+  /* ---------- формы ---------- */
+  label{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}
+  input,select{
+    width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    padding:8px 10px;border-radius:9px;font:14px inherit;font-family:inherit;
+  }
+  input:focus,select:focus{outline:none;border-color:var(--primary)}
+  input[type=range]{padding:0;height:22px;accent-color:var(--primary);background:transparent;border:0}
+  input[type=checkbox]{width:auto;accent-color:var(--primary)}
+  .btn{
+    background:var(--primary);border:0;color:#fff;padding:10px 18px;border-radius:10px;
+    cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;
+  }
+  .btn:hover{filter:brightness(1.1)}
+  .btn.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--text);font-weight:500}
+  .btn:disabled{opacity:.5;cursor:default}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{
+    background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    padding:8px 13px;border-radius:10px;cursor:pointer;font-size:13px;text-align:left;font-family:inherit;
+  }
+  .chip:hover{border-color:var(--primary);color:var(--text)}
+  .chip.on{background:rgba(79,142,247,.14);border-color:var(--primary);color:var(--text)}
+
+  .toggles{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .toggles label{display:flex;align-items:center;gap:7px;margin:0;color:var(--text);font-size:13.5px;cursor:pointer}
+
+  /* ---------- прочее ---------- */
+  .note{
+    background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--primary);
+    border-radius:10px;padding:13px 15px;font-size:13.5px;color:var(--muted);line-height:1.6
+  }
+  .note.warn{border-left-color:var(--hold)}
+  .reason{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid rgba(30,42,60,.5);font-size:13.5px}
+  .reason:last-child{border-bottom:0}
+  .reason .m{flex:0 0 5px;height:5px;border-radius:50%;margin-top:8px}
+  .reason.risk .m{background:var(--block)} .reason.safe .m{background:var(--allow)}
+  .reason .c{margin-left:auto;color:var(--dim);font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .msgbox{background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.32);border-radius:12px;padding:15px 17px;line-height:1.65;font-size:14px}
+  .msgbox.block{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.32)}
+  .msgbox.step_up{background:rgba(234,179,8,.08);border-color:rgba(234,179,8,.3)}
+  .loading{color:var(--dim);padding:26px;text-align:center}
+  svg{display:block;max-width:100%;overflow:visible}
+  .lgd{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+  .lgd i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+  .scroll{overflow-x:auto}
+  footer{color:var(--dim);font-size:12.5px;text-align:center;padding:36px 20px 10px;border-top:1px solid var(--line);margin-top:44px}
+  @media (max-width:640px){
+    .wrap{padding:0 14px 48px} .head{padding:12px 14px} nav{width:100%;margin-left:0}
+    .kpi .v{font-size:21px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="head">
+    <div class="logo"><span class="dot"></span>Fraud&nbsp;Hunter</div>
+    <span class="tagline" data-i="tagline"></span>
+    <nav id="nav"></nav>
+    <div class="langs" id="langs">
+      <button data-l="ru" class="on">RU</button>
+      <button data-l="kk">KZ</button>
+      <button data-l="en">EN</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="view"></div>
+</div>
+
+<footer>
+  Fraud Hunter · Overclock 2026 · FinTech ·
+  <a href="/docs">API</a>
+</footer>
+
+<script>
+"use strict";
+
+/* ======================================================================
+   Словарь интерфейса. Три языка: русский, казахский, английский.
+   Объяснения и сообщения клиенту приходят с сервера сразу на трёх —
+   переключение языка не требует повторного запроса.
+   ====================================================================== */
+const I18N = {
+  ru:{
+    tagline:"Антифрод, который объясняет каждое решение и считает его в тенге",
+    nav_dash:"Дашборд", nav_sim:"Симулятор", nav_feed:"Лента", nav_graph:"Связи",
+    nav_map:"География", nav_econ:"Экономика",
+    kpi_tx:"Транзакций за период", kpi_caught:"Пойманный фрод",
+    kpi_friction:"Честных клиентов с трением", kpi_saved:"Сэкономлено против порога",
+    kpi_prauc:"PR-AUC на отложенном тесте", kpi_missed:"Пропущено фрода",
+    dash_h:"Что происходит в потоке",
+    dash_sub:"Всё ниже посчитано на отложенном по времени тесте: модель этих дней не видела.",
+    daily_h:"Поток по дням", daily_sub:"Столбцы — объём операций, линия — выявленный фрод.",
+    actions_h:"Какие решения принимает система",
+    actions_sub:"Четыре действия вместо «пропустить или заблокировать».",
+    types_h:"По видам мошенничества",
+    types_sub:"Обратите внимание на социальную инженерию: система почти никогда не блокирует её, а звонит.",
+    money_h:"Потери за период, тенге",
+    money_sub:"Сравнение с тем, что было бы без системы и с одним фиксированным порогом на всех.",
+    rel_h:"Насколько можно верить вероятности",
+    rel_sub:"Если модель говорит 0.30, фродом должно оказаться около 30% таких операций. Точки должны лежать на диагонали.",
+    imp_h:"Что сильнее всего влияет на оценку",
+    sim_h:"Симулятор", 
+    sim_sub:"Выберите сценарий или соберите операцию вручную. Сценарий — это серия операций: система видит их по очереди, как в жизни.",
+    sim_run:"Проверить", sim_running:"Считаем…", sim_manual:"Вручную",
+    f_client:"Клиент", f_amount:"Сумма, ₸", f_cat:"Категория", f_channel:"Канал",
+    f_type:"Тип операции", f_city:"Город", f_device:"Устройство",
+    f_dev_known:"Своё устройство", f_dev_new:"Новое устройство",
+    f_vpn:"VPN", f_remote:"Удалённый доступ", f_call:"Звонок перед операцией, мин",
+    f_session:"Длительность сессии, сек",
+    res_decision:"Решение", res_p:"Вероятность фрода", res_kind:"Похоже на",
+    res_costs:"Ожидаемые потери по каждому действию, ₸",
+    res_costs_sub:"Система берёт самое дешёвое. Разница с следующим вариантом показывает, насколько решение уверенное.",
+    res_why:"Почему так решили", res_client:"Что увидит клиент",
+    res_operator:"Что делать оператору",
+    res_steps:"Шаги сценария", res_step:"Шаг",
+    curve_h:"Порога нет — есть граница, и она кривая",
+    curve_sub:"Какое действие дешевле при каждой паре «вероятность и сумма». Белым отмечено, где находится разобранная операция. Видно, что при малой сумме система терпит большой риск, а при крупной вмешивается почти сразу.",
+    feed_h:"Лента решений", feed_sub:"То, что видит дежурный аналитик.",
+    f_all:"Все", f_only_fraud:"Только подтверждённый фрод",
+    th_time:"Время", th_client:"Клиент", th_amount:"Сумма", th_place:"Где",
+    th_p:"Риск", th_action:"Решение", th_why:"Причины", th_truth:"Факт",
+    graph_h:"Граф связей", 
+    graph_sub:"Устройства и IP, за которыми стоит больше одного клиента. Так на экране проявляется кольцо карт.",
+    graph_hub:"узел", graph_clients:"клиентов", graph_none:"Колец в этом срезе не найдено.",
+    map_h:"География", map_sub:"Размер — объём операций, цвет — доля фрода.",
+    map_abroad:"Операции из-за рубежа", 
+    map_abroad_sub:"Точек мало, но доля фрода в них на порядок выше — здесь и живёт кража карт.",
+    econ_h:"Экономика решений",
+    econ_sub:"Это не константы в коде, а параметры бизнеса. Поменяйте их — и решения пересчитаются на ваших глазах.",
+    econ_eff:"Насколько действие останавливает схему",
+    econ_eff_sub:"Главная таблица системы. Подтверждение в push бесполезно против обмана: клиент подтверждает сам.",
+    econ_reset:"Вернуть как было", econ_applied:"Пересчитано с вашими параметрами",
+    fraud_yes:"фрод", fraud_no:"честная", risk:"против", safe:"за",
+    allow:"Пропустить", step_up:"Подтвердить", hold:"Задержать и позвонить", block:"Заблокировать",
+    stolen_card:"украденная карта", social_eng:"обман клиента", fraud_ring:"кольцо карт",
+    no_system:"Без системы", of:"из", tx:"операций", err:"Не удалось загрузить данные",
+    margin:"запас до следующего варианта",
+  },
+  kk:{
+    tagline:"Әр шешімін түсіндіріп, оны теңгемен есептейтін антифрод",
+    nav_dash:"Бақылау тақтасы", nav_sim:"Симулятор", nav_feed:"Лента", nav_graph:"Байланыстар",
+    nav_map:"География", nav_econ:"Экономика",
+    kpi_tx:"Кезеңдегі транзакциялар", kpi_caught:"Ұсталған алаяқтық",
+    kpi_friction:"Кедергі көрген адал клиенттер", kpi_saved:"Шекті мәнмен салыстырғанда үнем",
+    kpi_prauc:"Кейінге қалдырылған тесттегі PR-AUC", kpi_missed:"Өткізіп алынған алаяқтық",
+    dash_h:"Ағында не болып жатыр",
+    dash_sub:"Төмендегінің бәрі уақыт бойынша бөлінген тесте есептелген: модель бұл күндерді көрмеген.",
+    daily_h:"Күндер бойынша ағын", daily_sub:"Бағандар — операциялар көлемі, сызық — анықталған алаяқтық.",
+    actions_h:"Жүйе қандай шешім қабылдайды",
+    actions_sub:"«Өткізу немесе бұғаттаудың» орнына төрт әрекет.",
+    types_h:"Алаяқтық түрлері бойынша",
+    types_sub:"Әлеуметтік инженерияға назар аударыңыз: жүйе оны бұғаттамайды, қоңырау шалады.",
+    money_h:"Кезеңдегі шығын, теңге",
+    money_sub:"Жүйесіз қалай болатынымен және бәріне бірдей шекті мәнмен салыстыру.",
+    rel_h:"Ықтималдыққа қаншалықты сенуге болады",
+    rel_sub:"Модель 0.30 десе, осындай операциялардың шамамен 30%-ы алаяқтық болуы тиіс. Нүктелер диагональда жатуы керек.",
+    imp_h:"Бағаға ең көп әсер ететіні",
+    sim_h:"Симулятор",
+    sim_sub:"Сценарий таңдаңыз немесе операцияны қолмен жинаңыз. Сценарий — операциялар тізбегі: жүйе оларды кезекпен көреді.",
+    sim_run:"Тексеру", sim_running:"Есептеп жатырмыз…", sim_manual:"Қолмен",
+    f_client:"Клиент", f_amount:"Сома, ₸", f_cat:"Санат", f_channel:"Арна",
+    f_type:"Операция түрі", f_city:"Қала", f_device:"Құрылғы",
+    f_dev_known:"Өз құрылғысы", f_dev_new:"Жаңа құрылғы",
+    f_vpn:"VPN", f_remote:"Қашықтан қол жеткізу", f_call:"Операция алдындағы қоңырау, мин",
+    f_session:"Сессия ұзақтығы, сек",
+    res_decision:"Шешім", res_p:"Алаяқтық ықтималдығы", res_kind:"Ұқсайды",
+    res_costs:"Әр әрекет бойынша күтілетін шығын, ₸",
+    res_costs_sub:"Жүйе ең арзанын таңдайды. Келесі нұсқамен айырма шешімнің сенімділігін көрсетеді.",
+    res_why:"Неге осылай шешілді", res_client:"Клиент нені көреді",
+    res_operator:"Оператор не істеуі керек",
+    res_steps:"Сценарий қадамдары", res_step:"Қадам",
+    curve_h:"Шекті мән жоқ — иілген шекара бар",
+    curve_sub:"Әр «ықтималдық пен сома» жұбы үшін қай әрекет арзан. Ақ түспен талданған операцияның орны белгіленген. Сома аз болса, жүйе үлкен тәуекелге шыдайды, сома ірі болса, бірден араласады.",
+    feed_h:"Шешімдер лентасы", feed_sub:"Кезекші талдаушы көретін нәрсе.",
+    f_all:"Барлығы", f_only_fraud:"Тек расталған алаяқтық",
+    th_time:"Уақыт", th_client:"Клиент", th_amount:"Сома", th_place:"Қайда",
+    th_p:"Тәуекел", th_action:"Шешім", th_why:"Себептер", th_truth:"Факт",
+    graph_h:"Байланыстар графы",
+    graph_sub:"Артында бірнеше клиент тұрған құрылғылар мен IP. Карта сақинасы осылай көрінеді.",
+    graph_hub:"түйін", graph_clients:"клиент", graph_none:"Бұл кесіндіде сақиналар табылмады.",
+    map_h:"География", map_sub:"Өлшемі — операциялар көлемі, түсі — алаяқтық үлесі.",
+    map_abroad:"Шетелден жасалған операциялар",
+    map_abroad_sub:"Нүктелер аз, бірақ алаяқтық үлесі әлдеқайда жоғары — карта ұрлығы осында.",
+    econ_h:"Шешімдер экономикасы",
+    econ_sub:"Бұл кодтағы тұрақтылар емес, бизнес параметрлері. Оларды өзгертіңіз — шешімдер қайта есептеледі.",
+    econ_eff:"Әрекет схеманы қаншалықты тоқтатады",
+    econ_eff_sub:"Жүйенің басты кестесі. Push арқылы растау алдауға қарсы пайдасыз: клиент өзі растайды.",
+    econ_reset:"Бұрынғысына қайтару", econ_applied:"Сіздің параметрлеріңізбен қайта есептелді",
+    fraud_yes:"алаяқтық", fraud_no:"адал", risk:"қарсы", safe:"пайдасына",
+    allow:"Өткізу", step_up:"Растау", hold:"Ұстап, қоңырау шалу", block:"Бұғаттау",
+    stolen_card:"ұрланған карта", social_eng:"клиентті алдау", fraud_ring:"карта сақинасы",
+    no_system:"Жүйесіз", of:"ішінен", tx:"операция", err:"Деректерді жүктеу мүмкін болмады",
+    margin:"келесі нұсқаға дейінгі қор",
+  },
+  en:{
+    tagline:"Anti-fraud that explains every decision and prices it in tenge",
+    nav_dash:"Dashboard", nav_sim:"Simulator", nav_feed:"Feed", nav_graph:"Links",
+    nav_map:"Geography", nav_econ:"Economics",
+    kpi_tx:"Transactions in period", kpi_caught:"Fraud caught",
+    kpi_friction:"Honest clients given friction", kpi_saved:"Saved vs. fixed threshold",
+    kpi_prauc:"PR-AUC on held-out test", kpi_missed:"Fraud missed",
+    dash_h:"What is happening in the stream",
+    dash_sub:"Everything below is computed on a time-based held-out test the model never saw.",
+    daily_h:"Daily stream", daily_sub:"Bars are transaction volume, the line is detected fraud.",
+    actions_h:"What the system decides to do",
+    actions_sub:"Four actions instead of “allow or block”.",
+    types_h:"By type of fraud",
+    types_sub:"Note social engineering: the system almost never blocks it — it calls instead.",
+    money_h:"Losses over the period, tenge",
+    money_sub:"Compared with having no system, and with one fixed threshold for everyone.",
+    rel_h:"How much the probability can be trusted",
+    rel_sub:"If the model says 0.30, about 30% of such transactions should be fraud. Points should sit on the diagonal.",
+    imp_h:"What influences the score most",
+    sim_h:"Simulator",
+    sim_sub:"Pick a scenario or build a transaction by hand. A scenario is a sequence: the system sees the transactions one after another, as in real life.",
+    sim_run:"Evaluate", sim_running:"Computing…", sim_manual:"Manual",
+    f_client:"Client", f_amount:"Amount, KZT", f_cat:"Category", f_channel:"Channel",
+    f_type:"Transaction type", f_city:"City", f_device:"Device",
+    f_dev_known:"Own device", f_dev_new:"New device",
+    f_vpn:"VPN", f_remote:"Remote access", f_call:"Call before transaction, min",
+    f_session:"Session length, sec",
+    res_decision:"Decision", res_p:"Fraud probability", res_kind:"Looks like",
+    res_costs:"Expected loss for each action, KZT",
+    res_costs_sub:"The system takes the cheapest. The gap to the runner-up shows how confident the decision is.",
+    res_why:"Why this decision", res_client:"What the client sees",
+    res_operator:"What the operator should do",
+    res_steps:"Scenario steps", res_step:"Step",
+    curve_h:"There is no threshold — the boundary is a curve",
+    curve_sub:"Which action is cheapest for every pair of probability and amount. The white marker shows where the analysed transaction sits. At small amounts the system tolerates high risk; at large ones it steps in almost immediately.",
+    feed_h:"Decision feed", feed_sub:"What the analyst on duty sees.",
+    f_all:"All", f_only_fraud:"Confirmed fraud only",
+    th_time:"Time", th_client:"Client", th_amount:"Amount", th_place:"Where",
+    th_p:"Risk", th_action:"Decision", th_why:"Reasons", th_truth:"Truth",
+    graph_h:"Link graph",
+    graph_sub:"Devices and IPs with more than one client behind them. This is how a card ring shows up on screen.",
+    graph_hub:"hub", graph_clients:"clients", graph_none:"No rings found in this slice.",
+    map_h:"Geography", map_sub:"Size is transaction volume, colour is the fraud share.",
+    map_abroad:"Transactions from abroad",
+    map_abroad_sub:"Few points, but an order of magnitude more fraud — this is where stolen cards live.",
+    econ_h:"Decision economics",
+    econ_sub:"These are business parameters, not constants in the code. Change them and the decisions are recomputed in front of you.",
+    econ_eff:"How well an action stops each scheme",
+    econ_eff_sub:"The key table. A push confirmation is useless against a scam: the client confirms it themselves.",
+    econ_reset:"Reset to defaults", econ_applied:"Recomputed with your parameters",
+    fraud_yes:"fraud", fraud_no:"honest", risk:"against", safe:"for",
+    allow:"Allow", step_up:"Confirm", hold:"Hold and call", block:"Block",
+    stolen_card:"stolen card", social_eng:"scammed client", fraud_ring:"card ring",
+    no_system:"No system", of:"of", tx:"transactions", err:"Could not load the data",
+    margin:"gap to the runner-up",
+  }
+};
+
+let LANG = "ru";
+const T = k => (I18N[LANG] && I18N[LANG][k]) || I18N.ru[k] || k;
+
+/* ---------------------------------------------------------------- утилиты */
+const $  = (s,r=document)=>r.querySelector(s);
+const el = (t,a={},...kids)=>{
+  const n=document.createElement(t);
+  for(const [k,v] of Object.entries(a)){
+    if(k==="class") n.className=v;
+    else if(k==="html") n.innerHTML=v;
+    else if(k.startsWith("on")) n.addEventListener(k.slice(2),v);
+    else if(v!==null&&v!==undefined) n.setAttribute(k,v);
+  }
+  for(const c of kids.flat()) if(c!==null&&c!==undefined)
+    n.appendChild(typeof c==="object"?c:document.createTextNode(String(c)));
+  return n;
+};
+const LOC = {ru:"ru-RU", kk:"kk-KZ", en:"en-US"};
+const nf  = n => new Intl.NumberFormat(LOC[LANG]).format(Math.round(n||0));
+const money = n => nf(n)+" ₸";
+const UNITS = {ru:["тыс","млн","млрд"], kk:["мың","млн","млрд"], en:["K","M","B"]};
+const short1 = x => (Math.abs(x)>=100 ? Math.round(x) : Math.round(x*10)/10)
+  .toLocaleString(LOC[LANG]);
+const compact = n => {
+  const u=UNITS[LANG]||UNITS.ru, a=Math.abs(n||0);
+  if(a>=1e9) return short1(n/1e9)+" "+u[2];
+  if(a>=1e6) return short1(n/1e6)+" "+u[1];
+  if(a>=1e3) return short1(n/1e3)+" "+u[0];
+  return nf(n);
+};
+const pct = (x,d=1) => ((x||0)*100).toFixed(d)+"%";
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ACT_COLOR = {allow:"var(--allow)",step_up:"var(--stepup)",hold:"var(--hold)",block:"var(--block)"};
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  if(!r.ok) throw new Error(path+" → "+r.status);
+  return r.json();
+}
+
+/* ---------------------------------------------------------------- SVG */
+const SVGNS="http://www.w3.org/2000/svg";
+const svgEl=(t,a={})=>{
+  const n=document.createElementNS(SVGNS,t);
+  for(const [k,v] of Object.entries(a)) if(v!==null&&v!==undefined) n.setAttribute(k,v);
+  return n;
+};
+function svgRoot(w,h){
+  // xMinYMid: график прижат влево. Иначе при широком контейнере viewBox
+  // центрируется и слева остаётся пустая полоса в треть экрана.
+  return svgEl("svg",{viewBox:`0 0 ${w} ${h}`,width:"100%",height:h,role:"img",
+    preserveAspectRatio:"xMinYMid meet"});
+}
+function svgText(x,y,txt,a={}){
+  const t=svgEl("text",Object.assign({x,y,fill:"var(--muted)","font-size":11,
+    "font-family":"inherit"},a));
+  t.textContent=txt; return t;
+}
+
+/* Горизонтальная линейчатая диаграмма — самая честная форма для сравнений */
+function barsH(rows,{w=560,barH=30,gap=9,fmt=nf,pad=170}={}){
+  const h=rows.length*(barH+gap)+8;
+  const s=svgRoot(w,h);
+  const max=Math.max(...rows.map(r=>r.value),1);
+  rows.forEach((r,i)=>{
+    const y=i*(barH+gap);
+    const bw=Math.max(2,(w-pad-96)*(r.value/max));
+    s.appendChild(svgText(0,y+barH/2+4,r.label,{fill:"var(--text)","font-size":12.5}));
+    s.appendChild(svgEl("rect",{x:pad,y,width:w-pad-96,height:barH,rx:7,fill:"rgba(255,255,255,.035)"}));
+    s.appendChild(svgEl("rect",{x:pad,y,width:bw,height:barH,rx:7,fill:r.color||"var(--primary)"}));
+    s.appendChild(svgText(pad+bw+10,y+barH/2+4,fmt(r.value),
+      {fill:"var(--text)","font-size":12.5,"font-variant-numeric":"tabular-nums"}));
+  });
+  return s;
+}
+</script>
+
+<script>
+"use strict";
+/* ======================================================================
+   Дашборд
+   ====================================================================== */
+
+const CACHE = {};
+async function cached(key, path){
+  if(!CACHE[key]) CACHE[key] = api(path);
+  return CACHE[key];
+}
+
+function kpi(cls,label,value,note){
+  return el("div",{class:"kpi "+(cls||"")},
+    el("div",{class:"k"},label),
+    el("div",{class:"v"},value),
+    note?el("div",{class:"n"},note):null);
+}
+
+/* ---- столбцы по дням с линией фрода поверх ---- */
+function dailyChart(daily){
+  const w=980,h=240,padL=52,padR=16,padT=16,padB=30;
+  const s=svgRoot(w,h);
+  const maxTx=Math.max(...daily.map(d=>d.transactions),1);
+  const maxFr=Math.max(...daily.map(d=>d.fraud),1);
+  const iw=w-padL-padR, ih=h-padT-padB;
+  const bw=Math.max(3,iw/daily.length*0.66);
+
+  for(let i=0;i<=4;i++){
+    const y=padT+ih*i/4;
+    s.appendChild(svgEl("line",{x1:padL,x2:w-padR,y1:y,y2:y,stroke:"var(--line)","stroke-width":1}));
+    s.appendChild(svgText(padL-8,y+4,compact(maxTx*(1-i/4)),{"text-anchor":"end"}));
+  }
+  daily.forEach((d,i)=>{
+    const x=padL+iw*(i+0.5)/daily.length;
+    const bh=ih*(d.transactions/maxTx);
+    s.appendChild(svgEl("rect",{x:x-bw/2,y:padT+ih-bh,width:bw,height:bh,rx:3,
+      fill:"rgba(79,142,247,.5)"}));
+  });
+  const pts=daily.map((d,i)=>{
+    const x=padL+iw*(i+0.5)/daily.length;
+    const y=padT+ih-ih*(d.fraud/maxFr)*0.92;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  s.appendChild(svgEl("polyline",{points:pts,fill:"none",stroke:"var(--block)","stroke-width":2,
+    "stroke-linejoin":"round"}));
+  daily.forEach((d,i)=>{
+    const x=padL+iw*(i+0.5)/daily.length;
+    const y=padT+ih-ih*(d.fraud/maxFr)*0.92;
+    const c=svgEl("circle",{cx:x,cy:y,r:2.6,fill:"var(--block)"});
+    c.appendChild(svgEl("title")).textContent=`${d.day}: ${d.transactions} ${T("tx")}, ${d.fraud} ${T("fraud_yes")}`;
+    s.appendChild(c);
+  });
+  daily.forEach((d,i)=>{
+    if(i%4) return;
+    const x=padL+iw*(i+0.5)/daily.length;
+    s.appendChild(svgText(x,h-9,String(d.day).slice(5),{"text-anchor":"middle","font-size":10}));
+  });
+  return s;
+}
+
+/* ---- кривая надёжности: предсказано против фактического ---- */
+function reliabilityChart(bins){
+  const w=420,h=300,pad=44;
+  const s=svgRoot(w,h);
+  const iw=w-pad-14, ih=h-pad-28;
+  const X=v=>pad+iw*Math.min(v,1), Y=v=>h-pad+14-ih*Math.min(v,1);
+  for(let i=0;i<=4;i++){
+    const g=i/4;
+    s.appendChild(svgEl("line",{x1:pad,x2:w-14,y1:Y(g),y2:Y(g),stroke:"var(--line)"}));
+    s.appendChild(svgText(pad-8,Y(g)+4,g.toFixed(2),{"text-anchor":"end","font-size":10}));
+    s.appendChild(svgText(X(g),h-12,g.toFixed(2),{"text-anchor":"middle","font-size":10}));
+  }
+  s.appendChild(svgEl("line",{x1:X(0),y1:Y(0),x2:X(1),y2:Y(1),
+    stroke:"var(--dim)","stroke-dasharray":"4 4","stroke-width":1.4}));
+  const pts=bins.map(b=>`${X(b.predicted).toFixed(1)},${Y(b.actual).toFixed(1)}`).join(" ");
+  if(bins.length>1)
+    s.appendChild(svgEl("polyline",{points:pts,fill:"none",stroke:"var(--accent)","stroke-width":2}));
+  bins.forEach(b=>{
+    const c=svgEl("circle",{cx:X(b.predicted),cy:Y(b.actual),
+      r:Math.max(3.5,Math.min(11,Math.sqrt(b.count)/5.5)),
+      fill:"var(--accent)","fill-opacity":.55,stroke:"var(--accent)"});
+    c.appendChild(svgEl("title")).textContent=
+      `n=${b.count} · ${T("res_p")} ${b.predicted.toFixed(3)} · ${T("fraud_yes")} ${b.actual.toFixed(3)}`;
+    s.appendChild(c);
+  });
+  s.appendChild(svgText(pad,20,T("res_p"),{"font-size":10.5}));
+  return s;
+}
+
+async function viewDashboard(root){
+  root.appendChild(el("div",{class:"loading"},"…"));
+  let st, mt;
+  try{
+    [st,mt] = await Promise.all([cached("stats","/api/stats"), cached("metrics","/api/metrics")]);
+  }catch(e){ root.innerHTML=""; root.appendChild(el("div",{class:"note"},T("err")+": "+e.message)); return; }
+  root.innerHTML="";
+
+  root.appendChild(el("h2",{},T("dash_h")));
+  root.appendChild(el("p",{class:"sub"},T("dash_sub")));
+
+  root.appendChild(el("div",{class:"kpis"},
+    kpi("", T("kpi_tx"), nf(st.transactions), compact(st.turnover)+" ₸"),
+    kpi("good", T("kpi_caught"), pct(st.detection_rate),
+        nf(st.caught_count)+" "+T("of")+" "+nf(st.fraud_count)),
+    kpi("warn", T("kpi_friction"), pct(st.friction_rate,2),
+        nf(st.friction_count)+" "+T("tx")),
+    kpi("good", T("kpi_saved"), compact(st.saving_vs_threshold)+" ₸",
+        T("no_system")+": "+compact(st.saving_vs_nothing)+" ₸"),
+    kpi("bad", T("kpi_missed"), nf(st.missed_count), compact(st.missed_amount)+" ₸"),
+    kpi("", T("kpi_prauc"), st.pr_auc.toFixed(3), "ROC-AUC "+st.roc_auc.toFixed(3)),
+  ));
+
+  /* поток по дням */
+  const p1=el("div",{class:"panel"},
+    el("h3",{},T("daily_h")),
+    el("p",{class:"sub"},T("daily_sub")));
+  p1.appendChild(dailyChart(st.daily));
+  p1.appendChild(el("div",{class:"lgd"},
+    el("span",{html:'<i style="background:rgba(79,142,247,.6)"></i>'+esc(T("tx"))}),
+    el("span",{html:'<i style="background:var(--block)"></i>'+esc(T("fraud_yes"))})));
+  root.appendChild(p1);
+
+  /* решения и типы */
+  const two=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(380px,1fr));margin-top:14px"});
+  const pA=el("div",{class:"panel"},el("h3",{},T("actions_h")),el("p",{class:"sub"},T("actions_sub")));
+  pA.appendChild(barsH(
+    ["allow","step_up","hold","block"].map(a=>({label:T(a),value:st.actions[a]||0,color:ACT_COLOR[a]})),
+    {w:520,pad:150,fmt:v=>nf(v)+"  ("+pct(v/st.transactions,2)+")"}));
+  two.appendChild(pA);
+
+  const pB=el("div",{class:"panel"},el("h3",{},T("types_h")),el("p",{class:"sub"},T("types_sub")));
+  const typeRows=Object.entries(st.per_type||{}).map(([k,v])=>({
+    label:T(k)+" ("+v.count+")", value:v.detected_share,
+    color:k==="social_eng"?"var(--hold)":"var(--primary)"}));
+  pB.appendChild(barsH(typeRows,{w:520,pad:170,fmt:v=>pct(v)}));
+  const dist=el("div",{style:"margin-top:16px"});
+  for(const [k,v] of Object.entries(st.per_type||{})){
+    const row=el("div",{style:"display:flex;gap:6px;align-items:center;margin-bottom:7px;flex-wrap:wrap"});
+    row.appendChild(el("span",{class:"muted",style:"font-size:12px;min-width:150px"},T(k)));
+    for(const a of ["allow","step_up","hold","block"]){
+      const n=(v.actions||{})[a]||0;
+      if(!n) continue;
+      row.appendChild(el("span",{class:"badge b-"+a},T(a)+" "+n));
+    }
+    dist.appendChild(row);
+  }
+  pB.appendChild(dist);
+  two.appendChild(pB);
+  root.appendChild(two);
+
+  /* деньги */
+  const pM=el("div",{class:"panel",style:"margin-top:14px"},
+    el("h3",{},T("money_h")), el("p",{class:"sub"},T("money_sub")));
+  const cb=st.cost_baselines||{};
+  const moneyRows=[];
+  moneyRows.push({label:T("no_system"),value:cb.no_system||0,color:"var(--block)"});
+  for(const [k,v] of Object.entries(cb)){
+    if(k==="no_system") continue;
+    moneyRows.push({label:k.replace("threshold_best_","порог ").replace("threshold_","порог "),
+      value:v,color:"var(--stepup)"});
+  }
+  moneyRows.push({label:"Fraud Hunter",value:st.cost_ours,color:"var(--allow)"});
+  pM.appendChild(barsH(moneyRows,{w:760,pad:190,fmt:v=>compact(v)+" ₸",barH:34}));
+  root.appendChild(pM);
+
+  /* калибровка и важность */
+  const two2=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(380px,1fr));margin-top:14px"});
+  const pR=el("div",{class:"panel"},el("h3",{},T("rel_h")),el("p",{class:"sub"},T("rel_sub")));
+  pR.appendChild(reliabilityChart(mt.reliability||[]));
+  two2.appendChild(pR);
+
+  const pI=el("div",{class:"panel"},el("h3",{},T("imp_h")));
+  const imp=(mt.feature_importance||[]).slice(0,10);
+  const maxG=Math.max(...imp.map(i=>i.gain),1);
+  pI.appendChild(barsH(imp.map(i=>({label:i.feature,value:i.gain/maxG,color:"var(--accent)"})),
+    {w:520,pad:190,barH:22,gap:6,fmt:v=>(v*100).toFixed(0)}));
+  two2.appendChild(pI);
+  root.appendChild(two2);
+}
+</script>
+
+<script>
+"use strict";
+/* ======================================================================
+   Симулятор: сценарий → решение → объяснение → сообщение клиенту
+   ====================================================================== */
+
+let SIM = { presets:null, manual:null, econ:null, last:null };
+
+/* Ожидаемые потери по четырём действиям. Выбранное подсвечено. */
+function costChart(costs, chosen){
+  const rows=["allow","step_up","hold","block"].map(a=>({
+    label:T(a), value:Math.max(costs[a]||0,0),
+    color: a===chosen ? ACT_COLOR[a] : "rgba(255,255,255,.26)"
+  }));
+  return barsH(rows,{w:620,pad:170,barH:30,fmt:v=>money(v)});
+}
+
+/* Шкала вероятности */
+function gauge(p){
+  const w=300,h=92,s=svgRoot(w,h);
+  const x0=10,x1=w-10,y=54;
+  s.appendChild(svgEl("rect",{x:x0,y:y-9,width:x1-x0,height:18,rx:9,fill:"rgba(255,255,255,.06)"}));
+  const grad=svgEl("linearGradient",{id:"gg",x1:"0",x2:"1"});
+  [["0%","var(--allow)"],["45%","var(--stepup)"],["72%","var(--hold)"],["100%","var(--block)"]]
+    .forEach(([o,c])=>grad.appendChild(svgEl("stop",{offset:o,"stop-color":c})));
+  const defs=svgEl("defs"); defs.appendChild(grad); s.appendChild(defs);
+  s.appendChild(svgEl("rect",{x:x0,y:y-9,width:Math.max(4,(x1-x0)*p),height:18,rx:9,fill:"url(#gg)"}));
+  const cx=x0+(x1-x0)*p;
+  s.appendChild(svgEl("circle",{cx,cy:y,r:11,fill:"var(--panel)",stroke:"#fff","stroke-width":2.5}));
+  const t=svgText(cx,30,(p*100).toFixed(1)+"%",
+    {"text-anchor":"middle",fill:"var(--text)","font-size":19,"font-weight":700});
+  s.appendChild(t);
+  s.appendChild(svgText(x0,y+30,"0%",{"font-size":10}));
+  s.appendChild(svgText(x1,y+30,"100%",{"text-anchor":"end","font-size":10}));
+  return s;
+}
+
+/* Карта решений: самый прямой ответ на вопрос «а где у вас порог».
+   По горизонтали вероятность, по вертикали сумма в логарифме. Граница между
+   действиями — не линия, а кривая, которая ползёт влево с ростом суммы. */
+function decisionMap(data, current){
+  const rows=data.amounts.length, cols=data.probabilities.length;
+  const padL=68, padB=44, padT=12, padR=14;
+  const cw=17, ch=13;
+  const W=padL+cols*cw+padR, H=padT+rows*ch+padB;
+  const s=svgRoot(W,H);
+
+  const yOf=i=>padT+(rows-1-i)*ch;     // крупные суммы сверху
+  const xOf=j=>padL+j*cw;
+
+  for(let i=0;i<rows;i++)
+    for(let j=0;j<cols;j++){
+      const a=data.grid[i][j];
+      const r=svgEl("rect",{x:xOf(j),y:yOf(i),width:cw+0.5,height:ch+0.5,
+        fill:ACT_COLOR[a],"fill-opacity":.72});
+      r.appendChild(svgEl("title")).textContent=
+        `${compact(data.amounts[i])} ₸ · ${T("res_p")} ${(data.probabilities[j]*100).toFixed(0)}% → ${T(a)}`;
+      s.appendChild(r);
+    }
+
+  /* подписи оси сумм — через одну, иначе сливаются */
+  for(let i=0;i<rows;i+=3)
+    s.appendChild(svgText(padL-9,yOf(i)+ch-2,compact(data.amounts[i]),
+      {"text-anchor":"end","font-size":10}));
+  for(let j=0;j<cols;j+=5)
+    s.appendChild(svgText(xOf(j)+cw/2,H-padB+18,(data.probabilities[j]*100).toFixed(0)+"%",
+      {"text-anchor":"middle","font-size":10}));
+  s.appendChild(svgText(padL,H-padB+34,T("res_p"),{"font-size":10.5}));
+  s.appendChild(svgText(padL-9,padT-1,T("f_amount"),{"text-anchor":"end","font-size":10.5}));
+
+  /* где сейчас находится разбираемая операция */
+  if(current){
+    let bi=0, best=Infinity;
+    data.amounts.forEach((a,i)=>{
+      const d=Math.abs(Math.log(a)-Math.log(Math.max(current.amount,1)));
+      if(d<best){best=d;bi=i;}
+    });
+    const bj=Math.round(current.p*(cols-1));
+    s.appendChild(svgEl("rect",{x:padL-2,y:yOf(bi)-2,width:cols*cw+4,height:ch+4,
+      fill:"none",stroke:"rgba(255,255,255,.5)","stroke-width":1.2,rx:3}));
+    s.appendChild(svgEl("circle",{cx:xOf(bj)+cw/2,cy:yOf(bi)+ch/2,r:7,
+      fill:"none",stroke:"#fff","stroke-width":2.5}));
+  }
+
+  const lg=el("div",{class:"lgd"});
+  ["allow","step_up","hold","block"].forEach(a=>
+    lg.appendChild(el("span",{html:`<i style="background:${ACT_COLOR[a]}"></i>`+esc(T(a))})));
+  const box=el("div",{});
+  const sc=el("div",{class:"scroll"}); sc.appendChild(s);
+  box.appendChild(sc); box.appendChild(lg);
+  return box;
+}
+
+function renderReasons(reasons){
+  const box=el("div",{});
+  for(const r of reasons){
+    box.appendChild(el("div",{class:"reason "+r.direction},
+      el("span",{class:"m"}),
+      el("span",{},r.text[LANG]||r.text.ru),
+      el("span",{class:"c"},(r.contribution>0?"+":"")+r.contribution.toFixed(2))));
+  }
+  if(!reasons.length) box.appendChild(el("div",{class:"dim"},"—"));
+  return box;
+}
+
+/* Разбор одного шага сценария */
+function renderStep(step, idx, total){
+  const d=step.decision;
+  const wrap=el("div",{class:"panel",style:"margin-top:14px"});
+
+  const head=el("div",{style:"display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:6px"});
+  if(total>1) head.appendChild(el("span",{class:"dim",style:"font-size:12px"},
+    T("res_step")+" "+(idx+1)+"/"+total));
+  head.appendChild(el("span",{class:"badge b-"+d.action,style:"font-size:13px;padding:6px 14px"},d.action_label));
+  head.appendChild(el("span",{class:"muted",style:"font-size:13px"},
+    money(step.transaction.amount)+" · "+step.transaction.merchant_category+" · "+(step.transaction.city||"")));
+  head.appendChild(el("span",{class:"dim",style:"font-size:12px;margin-left:auto"},
+    T("res_kind")+": "+T(step.dominant_kind)));
+  wrap.appendChild(head);
+
+  const cols=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px;margin-top:10px"});
+
+  const c1=el("div",{});
+  c1.appendChild(el("h3",{},T("res_p")));
+  c1.appendChild(gauge(step.p_fraud));
+  c1.appendChild(el("div",{class:"dim",style:"font-size:12px;margin-top:2px"},
+    T("margin")+": "+money(d.margin_to_next)+" ("+T(d.runner_up)+")"));
+  cols.appendChild(c1);
+
+  const c2=el("div",{});
+  c2.appendChild(el("h3",{},T("res_costs")));
+  c2.appendChild(el("p",{class:"sub",style:"margin-bottom:10px"},T("res_costs_sub")));
+  c2.appendChild(costChart(d.expected_costs, d.action));
+  cols.appendChild(c2);
+  wrap.appendChild(cols);
+
+  const cols2=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px;margin-top:16px"});
+  const c3=el("div",{});
+  c3.appendChild(el("h3",{},T("res_why")));
+  c3.appendChild(renderReasons(step.reasons));
+  cols2.appendChild(c3);
+
+  const c4=el("div",{});
+  const msg=(step.client_message||{})[LANG];
+  if(msg){
+    c4.appendChild(el("h3",{},T("res_client")));
+    c4.appendChild(el("div",{class:"msgbox "+d.action},msg));
+  }
+  const op=(step.operator_script||{})[LANG];
+  if(op){
+    c4.appendChild(el("h3",{style:"margin-top:16px"},T("res_operator")));
+    c4.appendChild(el("div",{class:"note warn"},op));
+  }
+  if(!msg && !op) c4.appendChild(el("div",{class:"note"},"—"));
+  cols2.appendChild(c4);
+  wrap.appendChild(cols2);
+  return wrap;
+}
+
+async function runSequence(transactions, out){
+  out.innerHTML="";
+  out.appendChild(el("div",{class:"loading"},T("sim_running")));
+  try{
+    const body={transactions};
+    if(SIM.econ) body.economics=SIM.econ;
+    const res=await api("/api/score-sequence",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    SIM.last={transactions,res};
+    out.innerHTML="";
+    if(SIM.econ) out.appendChild(el("div",{class:"note",style:"margin-bottom:12px"},T("econ_applied")));
+    res.steps.forEach((s,i)=>out.appendChild(renderStep(s,i,res.steps.length)));
+
+    /* карта решений для схемы из последнего шага */
+    const last=res.steps[res.steps.length-1];
+    const dm=await api(`/api/decision-map?kind=${last.dominant_kind}`+
+      `&tx_type=${encodeURIComponent(last.transaction.tx_type)}`);
+    const cp=el("div",{class:"panel",style:"margin-top:14px"},
+      el("h3",{},T("curve_h")), el("p",{class:"sub"},T("curve_sub")));
+    cp.appendChild(decisionMap(dm,{p:last.p_fraud,amount:last.transaction.amount}));
+    out.appendChild(cp);
+  }catch(e){
+    out.innerHTML="";
+    out.appendChild(el("div",{class:"note"},T("err")+": "+e.message));
+  }
+}
+
+function manualForm(ref, presets){
+  const box=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px"});
+  const base=presets[0].sequence[0];
+  const mk=(key,label,node)=>{ const d=el("div",{}); d.appendChild(el("label",{},label)); d.appendChild(node);
+    node.dataset.k=key; return d; };
+  const sel=(key,label,opts,val)=>mk(key,label,
+    el("select",{}, ...opts.map(o=>el("option",{value:o,...(o===val?{selected:"selected"}:{})},o))));
+  const num=(key,label,val,step)=>mk(key,label,el("input",{type:"number",value:val,step:step||"1",min:"0"}));
+
+  box.appendChild(mk("client_id",T("f_client"),el("input",{type:"text",value:base.client_id})));
+  box.appendChild(num("amount",T("f_amount"),200000,"1000"));
+  box.appendChild(sel("merchant_category",T("f_cat"),ref.categories,"transfer_p2p"));
+  box.appendChild(sel("channel",T("f_channel"),ref.channels,"mobile_app"));
+  box.appendChild(sel("tx_type",T("f_type"),ref.tx_types,"transfer"));
+  box.appendChild(sel("city",T("f_city"),ref.cities,ref.cities[0]));
+  box.appendChild(sel("__device",T("f_device"),[T("f_dev_known"),T("f_dev_new")],T("f_dev_known")));
+  box.appendChild(num("call_minutes_before",T("f_call"),0,"1"));
+  box.appendChild(num("session_duration_s",T("f_session"),90,"5"));
+  return box;
+}
+
+async function viewSimulator(root){
+  root.appendChild(el("div",{class:"loading"},"…"));
+  let data;
+  try{ data = await cached("presets","/api/presets"); }
+  catch(e){ root.innerHTML=""; root.appendChild(el("div",{class:"note"},T("err"))); return; }
+  root.innerHTML="";
+
+  root.appendChild(el("h2",{},T("sim_h")));
+  root.appendChild(el("p",{class:"sub"},T("sim_sub")));
+
+  const out=el("div",{});
+  const panel=el("div",{class:"panel"});
+
+  /* сценарии */
+  const chips=el("div",{class:"chips"});
+  let activeKey=null;
+  data.presets.forEach(p=>{
+    const c=el("button",{class:"chip",style:"max-width:250px"},
+      el("div",{style:"font-weight:600;color:var(--text);margin-bottom:3px"},p.title),
+      el("div",{style:"font-size:11.5px;line-height:1.45"},p.hint));
+    c.addEventListener("click",()=>{
+      activeKey=p.key;
+      [...chips.children].forEach(n=>n.classList.remove("on"));
+      c.classList.add("on");
+      manualBox.classList.add("hide");
+      runSequence(p.sequence,out);
+    });
+    chips.appendChild(c);
+  });
+  const manualChip=el("button",{class:"chip",style:"max-width:250px"},
+    el("div",{style:"font-weight:600;color:var(--text)"},T("sim_manual")));
+  manualChip.addEventListener("click",()=>{
+    activeKey=null;
+    [...chips.children].forEach(n=>n.classList.remove("on"));
+    manualChip.classList.add("on");
+    manualBox.classList.remove("hide");
+  });
+  chips.appendChild(manualChip);
+  panel.appendChild(chips);
+
+  /* ручной режим */
+  const manualBox=el("div",{class:"hide",style:"margin-top:18px"});
+  const form=manualForm(data.reference,data.presets);
+  manualBox.appendChild(form);
+  const tog=el("div",{class:"toggles",style:"margin-top:14px"});
+  const cbVpn=el("input",{type:"checkbox"});
+  const cbRem=el("input",{type:"checkbox"});
+  tog.appendChild(el("label",{},cbVpn,T("f_vpn")));
+  tog.appendChild(el("label",{},cbRem,T("f_remote")));
+  manualBox.appendChild(tog);
+  const runBtn=el("button",{class:"btn",style:"margin-top:14px"},T("sim_run"));
+  runBtn.addEventListener("click",()=>{
+    const tx={country:"KZ"};
+    form.querySelectorAll("[data-k]").forEach(n=>{
+      const k=n.dataset.k;
+      if(k==="__device") return;
+      tx[k] = (n.type==="number") ? Number(n.value) : n.value;
+    });
+    const devSel=form.querySelector('[data-k="__device"]');
+    if(devSel && devSel.value===T("f_dev_new")) tx.device_id="DXMANUAL1";
+    const foreign={"Стамбул":"TR","Дубай":"AE","Москва":"RU","Бангкок":"TH","Лондон":"GB"};
+    if(foreign[tx.city]) tx.country=foreign[tx.city];
+    tx.is_vpn=cbVpn.checked?1:0;
+    tx.remote_access=cbRem.checked?1:0;
+    if(tx.tx_type==="transfer") tx.recipient_id="R90001";
+    runSequence([tx],out);
+  });
+  manualBox.appendChild(runBtn);
+  panel.appendChild(manualBox);
+  root.appendChild(panel);
+  root.appendChild(out);
+
+  /* сразу показываем самый показательный сценарий */
+  chips.children[0].click();
+}
+</script>
+
+<script>
+"use strict";
+/* ======================================================================
+   Лента, граф связей, география, экономика
+   ====================================================================== */
+
+async function viewFeed(root){
+  root.appendChild(el("h2",{},T("feed_h")));
+  root.appendChild(el("p",{class:"sub"},T("feed_sub")));
+
+  const controls=el("div",{class:"toggles",style:"margin-bottom:14px"});
+  const filters=["all","block","hold","step_up","allow"];
+  let current="all", onlyFraud=false;
+  const btns=el("div",{class:"chips"});
+  filters.forEach(f=>{
+    const b=el("button",{class:"chip"+(f==="all"?" on":"")},f==="all"?T("f_all"):T(f));
+    b.addEventListener("click",()=>{ current=f;
+      [...btns.children].forEach(n=>n.classList.remove("on")); b.classList.add("on"); load(); });
+    btns.appendChild(b);
+  });
+  controls.appendChild(btns);
+  const cb=el("input",{type:"checkbox"});
+  cb.addEventListener("change",()=>{ onlyFraud=cb.checked; load(); });
+  controls.appendChild(el("label",{},cb,T("f_only_fraud")));
+  root.appendChild(controls);
+
+  const holder=el("div",{class:"panel"});
+  root.appendChild(holder);
+
+  async function load(){
+    holder.innerHTML="";
+    holder.appendChild(el("div",{class:"loading"},"…"));
+    try{
+      const d=await api(`/api/feed?limit=60&action=${current}&only_fraud=${onlyFraud}`);
+      holder.innerHTML="";
+      const tbl=el("table",{});
+      tbl.appendChild(el("thead",{},el("tr",{},
+        ...[T("th_time"),T("th_client"),T("th_amount"),T("th_place"),
+            T("th_p"),T("th_action"),T("th_why"),T("th_truth")]
+          .map((h,i)=>el("th",{class:i===2||i===4?"num":""},h)))));
+      const tb=el("tbody",{});
+      d.items.forEach(it=>{
+        const why=el("div",{});
+        it.reasons.filter(r=>r.direction==="risk").slice(0,2).forEach(r=>
+          why.appendChild(el("div",{style:"font-size:12.5px;color:var(--muted);line-height:1.45"},
+            r.text[LANG]||r.text.ru)));
+        tb.appendChild(el("tr",{},
+          el("td",{class:"mono dim",style:"font-size:12px;white-space:nowrap"},
+            String(it.timestamp).slice(5,16)),
+          el("td",{class:"mono",style:"font-size:12.5px"},it.client_id),
+          el("td",{class:"num mono"},nf(it.amount)),
+          el("td",{style:"font-size:12.5px"},
+            el("div",{},it.city),
+            el("div",{class:"dim",style:"font-size:11.5px"},it.merchant_category)),
+          el("td",{class:"num mono",style:"font-weight:600;color:"+
+            (it.p_fraud>0.5?"var(--block)":it.p_fraud>0.1?"var(--stepup)":"var(--muted)")},
+            (it.p_fraud*100).toFixed(1)+"%"),
+          el("td",{},el("span",{class:"badge b-"+it.action},it.action_label)),
+          el("td",{},why),
+          el("td",{},it.is_fraud
+            ? el("span",{class:"badge b-block"},T(it.fraud_type||"fraud_yes"))
+            : el("span",{class:"dim",style:"font-size:12px"},T("fraud_no")))
+        ));
+      });
+      tbl.appendChild(tb);
+      const sc=el("div",{class:"scroll"}); sc.appendChild(tbl);
+      holder.appendChild(sc);
+      if(!d.items.length) holder.appendChild(el("div",{class:"loading"},"—"));
+    }catch(e){
+      holder.innerHTML=""; holder.appendChild(el("div",{class:"note"},T("err")+": "+e.message));
+    }
+  }
+  load();
+}
+
+/* ---------------------------------------------------------------- граф */
+async function viewGraph(root){
+  root.appendChild(el("h2",{},T("graph_h")));
+  root.appendChild(el("p",{class:"sub"},T("graph_sub")));
+  const holder=el("div",{class:"panel"});
+  holder.appendChild(el("div",{class:"loading"},"…"));
+  root.appendChild(holder);
+
+  let g;
+  try{ g = await cached("graph","/api/graph?min_clients=3&limit=6"); }
+  catch(e){ holder.innerHTML=""; holder.appendChild(el("div",{class:"note"},T("err"))); return; }
+  holder.innerHTML="";
+
+  const hubs=g.nodes.filter(n=>n.type!=="client");
+  if(!hubs.length){ holder.appendChild(el("div",{class:"loading"},T("graph_none"))); return; }
+
+  /* Радиальная раскладка: каждый хаб в центре своего кольца.
+     Физика тут не нужна — структура и так читается с одного взгляда. */
+  const perRow=Math.min(3,hubs.length);
+  const cellW=340, cellH=310;
+  const rows=Math.ceil(hubs.length/perRow);
+  const W=perRow*cellW, H=rows*cellH;
+  const s=svgRoot(W,H);
+
+  hubs.forEach((hub,i)=>{
+    const cx=(i%perRow)*cellW+cellW/2, cy=Math.floor(i/perRow)*cellH+cellH/2;
+    const kids=g.edges.filter(e=>e.source===hub.id);
+    const R=Math.min(112, 46+kids.length*5);
+    const danger=hub.fraud_share>0.5;
+
+    kids.forEach((e,j)=>{
+      const a=(j/kids.length)*Math.PI*2 - Math.PI/2;
+      const x=cx+R*Math.cos(a), y=cy+R*Math.sin(a);
+      s.appendChild(svgEl("line",{x1:cx,y1:cy,x2:x,y2:y,
+        stroke:danger?"rgba(239,68,68,.45)":"rgba(132,151,179,.3)",
+        "stroke-width":Math.min(3,1+e.weight*0.35)}));
+      const node=g.nodes.find(n=>n.id===e.target)||{};
+      const c=svgEl("circle",{cx:x,cy:y,r:8,
+        fill:node.fraud_share>0.5?"var(--block)":"var(--primary)","fill-opacity":.85});
+      c.appendChild(svgEl("title")).textContent=
+        `${node.label} · ${e.weight} ${T("tx")} · ${compact(e.amount)} ₸`;
+      s.appendChild(c);
+    });
+
+    const hc=svgEl("circle",{cx,cy,r:26,fill:danger?"var(--block)":"var(--accent)",
+      "fill-opacity":.22,stroke:danger?"var(--block)":"var(--accent)","stroke-width":2});
+    hc.appendChild(svgEl("title")).textContent=
+      `${hub.type}: ${hub.label} · ${hub.clients} ${T("graph_clients")} · ${compact(hub.amount)} ₸`;
+    s.appendChild(hc);
+    s.appendChild(svgText(cx,cy+4,hub.clients,
+      {"text-anchor":"middle",fill:"var(--text)","font-size":15,"font-weight":700}));
+    s.appendChild(svgText(cx,cy-cellH/2+26,hub.type+" · "+hub.label,
+      {"text-anchor":"middle",fill:"var(--text)","font-size":12,"font-weight":600}));
+    s.appendChild(svgText(cx,cy-cellH/2+43,
+      hub.clients+" "+T("graph_clients")+" · "+pct(hub.fraud_share,0)+" "+T("fraud_yes"),
+      {"text-anchor":"middle","font-size":11}));
+  });
+  const sc=el("div",{class:"scroll"}); sc.appendChild(s); holder.appendChild(sc);
+  holder.appendChild(el("div",{class:"lgd"},
+    el("span",{html:'<i style="background:var(--accent)"></i>'+esc(T("graph_hub"))}),
+    el("span",{html:'<i style="background:var(--primary)"></i>'+esc(T("th_client"))}),
+    el("span",{html:'<i style="background:var(--block)"></i>'+esc(T("fraud_yes"))})));
+}
+
+/* ---------------------------------------------------------------- карта */
+async function viewMap(root){
+  root.appendChild(el("h2",{},T("map_h")));
+  root.appendChild(el("p",{class:"sub"},T("map_sub")));
+  const holder=el("div",{class:"panel"});
+  holder.appendChild(el("div",{class:"loading"},"…"));
+  root.appendChild(holder);
+
+  let m;
+  try{ m = await cached("map","/api/map"); }
+  catch(e){ holder.innerHTML=""; holder.appendChild(el("div",{class:"note"},T("err"))); return; }
+  holder.innerHTML="";
+
+  /* Казахстан и заграница рисуются отдельно. Иначе Лагос и Бангкок растягивают
+     рамку так, что вся страна сжимается в пятно и карту невозможно читать. */
+  const kz=m.points.filter(p=>!p.foreign);
+  const abroad=m.points.filter(p=>p.foreign);
+
+  if(kz.length){
+    const lats=kz.map(p=>p.lat), lons=kz.map(p=>p.lon);
+    const minLat=Math.min(...lats)-1.6, maxLat=Math.max(...lats)+1.6;
+    const minLon=Math.min(...lons)-2.2, maxLon=Math.max(...lons)+2.2;
+    /* Поправка на широту: градус долготы на 50-й параллели короче градуса широты */
+    const kx=Math.cos((minLat+maxLat)/2*Math.PI/180);
+    const W=980, pad=34;
+    const spanX=(maxLon-minLon)*kx, spanY=(maxLat-minLat);
+    const H=Math.round((W-2*pad)*spanY/spanX)+2*pad;
+    const X=lon=>pad+(W-2*pad)*((lon-minLon)*kx)/spanX;
+    const Y=lat=>pad+(H-2*pad)*(1-(lat-minLat)/spanY);
+
+    const s=svgRoot(W,H);
+    s.appendChild(svgEl("rect",{x:0,y:0,width:W,height:H,rx:12,fill:"rgba(79,142,247,.05)"}));
+    for(let lon=Math.ceil(minLon/5)*5; lon<maxLon; lon+=5)
+      s.appendChild(svgEl("line",{x1:X(lon),x2:X(lon),y1:pad,y2:H-pad,
+        stroke:"var(--line)","stroke-dasharray":"3 6"}));
+    for(let lat=Math.ceil(minLat/3)*3; lat<maxLat; lat+=3)
+      s.appendChild(svgEl("line",{x1:pad,x2:W-pad,y1:Y(lat),y2:Y(lat),
+        stroke:"var(--line)","stroke-dasharray":"3 6"}));
+
+    const maxTx=Math.max(...kz.map(p=>p.transactions),1);
+    const sorted=[...kz].sort((a,b)=>b.transactions-a.transactions);
+    /* Большие круги рисуем первыми, чтобы мелкие не тонули под ними */
+    sorted.forEach(p=>{
+      const r=7+30*Math.sqrt(p.transactions/maxTx);
+      const hot=Math.min(p.fraud_rate/0.05,1);
+      const color=`rgb(${Math.round(79+176*hot)},${Math.round(142-74*hot)},${Math.round(247-179*hot)})`;
+      const c=svgEl("circle",{cx:X(p.lon),cy:Y(p.lat),r,fill:color,"fill-opacity":.4,
+        stroke:color,"stroke-width":1.8});
+      c.appendChild(svgEl("title")).textContent =
+        `${p.city}: ${nf(p.transactions)} ${T("tx")} · ${compact(p.amount)} ₸ · `+
+        `${T("fraud_yes")} ${p.fraud} (${pct(p.fraud_rate,2)}) · ${T("block")} ${p.blocked}`;
+      s.appendChild(c);
+    });
+    /* Подписи — только крупнейшим городам, иначе они наезжают друг на друга */
+    const placed=[];
+    sorted.slice(0,9).forEach(p=>{
+      const r=7+30*Math.sqrt(p.transactions/maxTx);
+      const x=X(p.lon);
+      let y=Y(p.lat)-r-7;
+      while(placed.some(q=>Math.abs(q.x-x)<62 && Math.abs(q.y-y)<13)) y-=14;
+      placed.push({x,y});
+      const t=svgText(x,y,p.city,{"text-anchor":"middle",fill:"var(--text)","font-size":11.5});
+      t.setAttribute("stroke","var(--bg)"); t.setAttribute("stroke-width","3.5");
+      t.setAttribute("paint-order","stroke");
+      s.appendChild(t);
+    });
+    const sc=el("div",{class:"scroll"}); sc.appendChild(s); holder.appendChild(sc);
+    holder.appendChild(el("div",{class:"lgd"},
+      el("span",{html:'<i style="background:rgb(79,142,247)"></i>'+esc(T("fraud_no"))}),
+      el("span",{html:'<i style="background:rgb(255,68,68)"></i>'+esc(T("fraud_yes"))})));
+  }
+
+  /* Заграница: точек мало, но доля фрода в них совсем другая */
+  if(abroad.length){
+    const p2=el("div",{class:"panel",style:"margin-top:14px"},
+      el("h3",{},T("map_abroad")), el("p",{class:"sub"},T("map_abroad_sub")));
+    p2.appendChild(barsH(
+      abroad.sort((a,b)=>b.fraud_rate-a.fraud_rate).map(p=>({
+        label:p.city+" ("+p.country+")", value:p.fraud_rate,
+        color:p.fraud_rate>0.3?"var(--block)":"var(--stepup)"})),
+      {w:620,pad:180,barH:24,gap:7,fmt:v=>pct(v,1)}));
+    root.appendChild(p2);
+  }
+
+  const tp=el("div",{class:"panel",style:"margin-top:14px"});
+  const tbl=el("table",{});
+  tbl.appendChild(el("thead",{},el("tr",{},
+    el("th",{},T("th_place")),
+    el("th",{class:"num"},T("tx")),
+    el("th",{class:"num"},T("th_amount")),
+    el("th",{class:"num"},T("fraud_yes")),
+    el("th",{class:"num"},T("block")))));
+  const tb=el("tbody",{});
+  [...m.points].sort((a,b)=>b.transactions-a.transactions).slice(0,14)
+    .forEach(p=>tb.appendChild(el("tr",{},
+      el("td",{},p.city, p.foreign?el("span",{class:"dim",style:"font-size:11px"}," · "+p.country):null),
+      el("td",{class:"num mono"},nf(p.transactions)),
+      el("td",{class:"num mono"},compact(p.amount)+" ₸"),
+      el("td",{class:"num mono"},p.fraud+" ("+pct(p.fraud_rate,2)+")"),
+      el("td",{class:"num mono"},p.blocked))));
+  tbl.appendChild(tb);
+  const sc2=el("div",{class:"scroll"}); sc2.appendChild(tbl);
+  tp.appendChild(sc2); root.appendChild(tp);
+}
+
+/* ---------------------------------------------------------------- экономика */
+const ECON_FIELDS=[
+  ["case_handling_cost",     {ru:"Разбор одного случая фрода",   kk:"Бір алаяқтық жағдайын талдау", en:"Handling one fraud case"},            0, 30000, 500],
+  ["hold_op_cost",           {ru:"Звонок оператора",              kk:"Оператор қоңырауы",            en:"Operator call"},                       0, 10000, 100],
+  ["hold_friction_rate",     {ru:"Ущерб от задержки, доля суммы", kk:"Кідірістен зиян, сома үлесі",  en:"Delay damage, share of amount"},       0, 0.05, 0.001],
+  ["step_up_friction_rate",  {ru:"Трение подтверждения, доля",    kk:"Растау кедергісі, үлес",       en:"Confirmation friction, share"},        0, 0.02, 0.0005],
+  ["block_churn_rate",       {ru:"Риск ухода после блокировки",   kk:"Бұғаттаудан кейін кету қаупі", en:"Churn risk after a false block"},      0, 0.5,  0.01],
+  ["lgd_transfer",           {ru:"Невозвратность перевода",       kk:"Аударымның қайтарымсыздығы",   en:"Loss given fraud, transfers"},         0, 1,    0.01],
+];
+
+async function viewEconomics(root){
+  root.appendChild(el("h2",{},T("econ_h")));
+  root.appendChild(el("p",{class:"sub"},T("econ_sub")));
+
+  let econ;
+  try{ econ = await cached("econ","/api/economics"); }
+  catch(e){ root.appendChild(el("div",{class:"note"},T("err"))); return; }
+
+  const panel=el("div",{class:"panel"});
+  const grid=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px"});
+  const current=Object.assign({},SIM.econ||{});
+
+  ECON_FIELDS.forEach(([key,label,min,max,step])=>{
+    const val=(current[key]!==undefined)?current[key]:econ[key];
+    const d=el("div",{});
+    const out=el("span",{class:"mono",style:"color:var(--text);float:right"},
+      step<1?Number(val).toFixed(4).replace(/0+$/,"").replace(/\.$/,""):nf(val));
+    d.appendChild(el("label",{},label[LANG]||label.ru,out));
+    const r=el("input",{type:"range",min,max,step,value:val});
+    r.addEventListener("input",()=>{
+      current[key]=Number(r.value);
+      out.textContent = step<1
+        ? Number(r.value).toFixed(4).replace(/0+$/,"").replace(/\.$/,"")
+        : nf(r.value);
+    });
+    d.appendChild(r);
+    grid.appendChild(d);
+  });
+  panel.appendChild(grid);
+
+  const row=el("div",{style:"display:flex;gap:10px;margin-top:16px;flex-wrap:wrap"});
+  const apply=el("button",{class:"btn"},T("sim_run"));
+  apply.addEventListener("click",()=>{ SIM.econ=Object.assign({},current); go("sim"); });
+  const reset=el("button",{class:"btn ghost"},T("econ_reset"));
+  reset.addEventListener("click",()=>{ SIM.econ=null; go("econ"); });
+  row.appendChild(apply); row.appendChild(reset);
+  panel.appendChild(row);
+  root.appendChild(panel);
+
+  /* матрица эффективности — сердце стоимостной модели */
+  const eff=econ.effectiveness||{};
+  const p2=el("div",{class:"panel",style:"margin-top:14px"},
+    el("h3",{},T("econ_eff")), el("p",{class:"sub"},T("econ_eff_sub")));
+  const kinds=["stolen_card","social_eng","fraud_ring"];
+  const tbl=el("table",{});
+  tbl.appendChild(el("thead",{},el("tr",{},
+    el("th",{},""), ...kinds.map(k=>el("th",{class:"num"},T(k))))));
+  const tb=el("tbody",{});
+  ["step_up","hold","block"].forEach(a=>{
+    tb.appendChild(el("tr",{},
+      el("td",{},el("span",{class:"badge b-"+a},T(a))),
+      ...kinds.map(k=>{
+        const v=(eff[a]||{})[k]||0;
+        const strong=v>=0.8, weak=v<0.3;
+        return el("td",{class:"num mono",
+          style:"font-weight:600;color:"+(strong?"var(--allow)":weak?"var(--block)":"var(--stepup)")},
+          pct(v,0));
+      })));
+  });
+  tbl.appendChild(tb);
+  const sc=el("div",{class:"scroll"}); sc.appendChild(tbl); p2.appendChild(sc);
+  root.appendChild(p2);
+}
+</script>
+
+<script>
+"use strict";
+/* ======================================================================
+   Маршрутизация и запуск
+   ====================================================================== */
+
+const VIEWS = [
+  ["dash",  "nav_dash",  viewDashboard],
+  ["sim",   "nav_sim",   viewSimulator],
+  ["feed",  "nav_feed",  viewFeed],
+  ["graph", "nav_graph", viewGraph],
+  ["map",   "nav_map",   viewMap],
+  ["econ",  "nav_econ",  viewEconomics],
+];
+
+let CURRENT = "dash";
+
+function renderNav(){
+  const nav=$("#nav"); nav.innerHTML="";
+  VIEWS.forEach(([key,labelKey])=>{
+    const b=el("button",{class:key===CURRENT?"on":""},T(labelKey));
+    b.addEventListener("click",()=>go(key));
+    nav.appendChild(b);
+  });
+  document.querySelectorAll("[data-i]").forEach(n=>{ n.textContent=T(n.dataset.i); });
+  document.documentElement.lang = LANG==="kk" ? "kk" : LANG;
+}
+
+function go(key){
+  CURRENT=key;
+  if(location.hash.slice(1)!==key) history.replaceState(null,"","#"+key);
+  renderNav();
+  const root=$("#view"); root.innerHTML="";
+  const view=(VIEWS.find(v=>v[0]===key)||VIEWS[0])[2];
+  Promise.resolve(view(root)).catch(e=>{
+    root.innerHTML="";
+    root.appendChild(el("div",{class:"note"},T("err")+": "+e.message));
+  });
+}
+
+function setLang(l){
+  LANG=l;
+  try{ localStorage.setItem("fh_lang", l); }catch(_){}
+  document.querySelectorAll("#langs button").forEach(b=>b.classList.toggle("on",b.dataset.l===l));
+  go(CURRENT);
+}
+
+document.querySelectorAll("#langs button").forEach(b=>
+  b.addEventListener("click",()=>setLang(b.dataset.l)));
+
+window.addEventListener("hashchange",()=>{
+  const k=location.hash.slice(1);
+  if(k && k!==CURRENT && VIEWS.some(v=>v[0]===k)) go(k);
+});
+
+(function start(){
+  let saved=null;
+  try{ saved=localStorage.getItem("fh_lang"); }catch(_){}
+  if(saved && I18N[saved]) LANG=saved;
+  document.querySelectorAll("#langs button").forEach(b=>b.classList.toggle("on",b.dataset.l===LANG));
+  const hash=location.hash.slice(1);
+  go(VIEWS.some(v=>v[0]===hash) ? hash : "dash");
+})();
+</script>
+</body>
+</html>
