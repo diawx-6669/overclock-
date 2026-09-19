@@ -15,6 +15,7 @@ services:
       pip install -r requirements.txt
       python -m ml.generate_data
       python -m ml.train
+      python -m ml.report
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:

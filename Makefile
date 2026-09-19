@@ -1,4 +1,4 @@
-.PHONY: install data train run test all clean
+.PHONY: install data train report run test all clean demo
 
 install:
 	pip install -r requirements.txt
@@ -9,13 +9,19 @@ data:
 train:
 	python -m ml.train
 
+report:
+	python -m ml.report
+
 run:
 	uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
 test:
 	python -m pytest tests -q
 
-all: install data train
+all: install data train report
+
+demo:
+	python -m scripts.export_demo
 
 clean:
 	rm -f data/*.csv models/*.joblib models/metrics.json

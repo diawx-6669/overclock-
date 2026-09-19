@@ -32,6 +32,7 @@ FRONTEND = ROOT / "frontend" / "index.html"
 GET_PATHS = [
     "/api/stats",
     "/api/metrics",
+    "/api/report",
     "/api/economics",
     "/api/graph?min_clients=3&limit=6",
     "/api/map",

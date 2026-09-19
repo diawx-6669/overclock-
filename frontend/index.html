@@ -34,10 +34,14 @@
   .logo{display:flex;align-items:center;gap:11px;font-weight:700;font-size:18px;letter-spacing:-.2px}
   .logo .dot{width:11px;height:11px;border-radius:50%;background:var(--allow);box-shadow:0 0 0 4px rgba(34,197,94,.16)}
   .tagline{color:var(--muted);font-size:13px;font-weight:400;margin-left:2px}
+  /* Вкладок семь, и на средних экранах подзаголовок вытесняет переключатель
+     языка на вторую строку. Подзаголовок здесь наименее ценный элемент. */
+  @media (max-width:1300px){ .tagline{display:none} }
   nav{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
   nav button{
     background:transparent;border:1px solid transparent;color:var(--muted);
-    padding:7px 13px;border-radius:9px;cursor:pointer;font-size:14px;font-family:inherit;
+    padding:6px 10px;border-radius:9px;cursor:pointer;font-size:13.5px;font-family:inherit;
+    white-space:nowrap;
   }
   nav button:hover{color:var(--text);background:var(--panel)}
   nav button.on{background:var(--panel);color:var(--text);border-color:var(--line)}
@@ -52,12 +56,74 @@
   h2{font-size:19px;margin:30px 0 4px;letter-spacing:-.2px}
   h3{font-size:15px;margin:0 0 12px;color:var(--text)}
   .sub{color:var(--muted);font-size:13.5px;margin:0 0 18px;max-width:78ch}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;min-width:0}
   .grid{display:grid;gap:14px}
+  /* Элементы сетки по умолчанию не сжимаются ниже содержимого, поэтому
+     широкая таблица внутри распирала страницу, несмотря на контейнер с
+     прокруткой. min-width:0 возвращает им способность ужиматься. */
+  .grid > *{min-width:0}
   .hide{display:none !important}
   .muted{color:var(--muted)}
   .dim{color:var(--dim)}
   .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+  /* ---------- обложка ---------- */
+  .hero{
+    background:
+      radial-gradient(1100px 300px at 12% -10%, rgba(79,142,247,.16), transparent 62%),
+      radial-gradient(800px 260px at 88% 0%, rgba(167,139,250,.12), transparent 60%),
+      var(--panel);
+    border:1px solid var(--line);border-radius:18px;padding:26px 26px 22px;margin:20px 0 14px;
+  }
+  .hero h1{
+    font-size:clamp(22px,3.1vw,33px);line-height:1.18;margin:0 0 10px;
+    letter-spacing:-.9px;font-weight:700;text-wrap:balance;max-width:34ch;
+  }
+  .hero h1 em{font-style:normal;color:var(--hold)}
+  .hero p.lead{color:var(--muted);font-size:14.5px;line-height:1.6;margin:0;max-width:62ch}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 0}
+  .pill{
+    display:inline-flex;align-items:center;gap:7px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:12.5px;color:var(--muted);
+  }
+  .pill b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+  .pill .d{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+  /* живая лента в обложке */
+  .tick{margin-top:20px;border-top:1px solid var(--line);padding-top:14px}
+  .tick-head{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:11.5px;margin-bottom:9px}
+  .tick-head .live{
+    width:7px;height:7px;border-radius:50%;background:var(--allow);
+    box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:pulse 2.4s ease-out infinite;
+  }
+  @keyframes pulse{
+    0%{box-shadow:0 0 0 0 rgba(34,197,94,.5)}
+    70%{box-shadow:0 0 0 9px rgba(34,197,94,0)}
+    100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}
+  }
+  .tick-rows{display:flex;flex-direction:column;gap:5px;min-height:132px}
+  .tick-row{
+    display:flex;align-items:center;gap:11px;font-size:12.5px;padding:5px 10px;
+    border-radius:9px;background:var(--panel2);border:1px solid transparent;
+    animation:slidein .45s ease-out;
+  }
+  .tick-row.hot{border-color:rgba(239,68,68,.32);background:rgba(239,68,68,.07)}
+  @keyframes slidein{from{opacity:0;transform:translateY(-7px)}to{opacity:1;transform:none}}
+  .tick-row .c{color:var(--dim);font-variant-numeric:tabular-nums;flex:0 0 66px}
+  .tick-row .a{font-variant-numeric:tabular-nums;flex:0 0 96px;text-align:right;color:var(--text)}
+  .tick-row .w{color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tick-row .p{font-variant-numeric:tabular-nums;flex:0 0 44px;text-align:right;font-weight:600}
+  @media (max-width:560px){
+    /* На узком экране в строку не влезает всё сразу. Причина решения важнее
+       города и точного времени, поэтому сжимаем именно их. */
+    .tick-row{gap:7px;font-size:11.5px;padding:5px 8px}
+    .tick-row .c{display:none}
+    .tick-row .a{flex:0 0 78px}
+    .tick-row .w{display:none}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .tick-row{animation:none} .tick-head .live{animation:none}
+  }
 
   /* ---------- карточки показателей ---------- */
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:12px;margin:18px 0}
@@ -131,7 +197,7 @@
   svg{display:block;max-width:100%;overflow:visible}
   .lgd{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
   .lgd i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
-  .scroll{overflow-x:auto}
+  .scroll{overflow-x:auto;max-width:100%}
   footer{color:var(--dim);font-size:12.5px;text-align:center;padding:36px 20px 10px;border-top:1px solid var(--line);margin-top:44px}
   @media (max-width:640px){
     .wrap{padding:0 14px 48px} .head{padding:12px 14px} nav{width:100%;margin-left:0}
@@ -229,6 +295,54 @@ const I18N = {
     static_note_sim:"Это статичная витрина: шесть сценариев посчитаны настоящей моделью заранее. Ручной ввод произвольной операции требует работающей модели — он есть в полной версии.",
     static_note_econ:"Это статичная витрина: ползунки показывают параметры, но пересчёт решений требует работающей модели — он есть в полной версии.",
     static_badge:"витрина",
+    hero_title:'Антифрод, который ловит и тех, кто крадёт карту,<br>и тех, кто <em>заставляет клиента заплатить самому</em>',
+    hero_lead:"Два независимых канала детекции, 51 признак с защитой от утечек во времени и выбор действия по ожидаемым потерям в тенге. Порога нет: для каждой операции считается, во сколько обойдётся каждое из четырёх решений, и берётся самое дешёвое.",
+    hero_live:"живой поток решений — настоящие операции тестового периода",
+    pill_features:"признака", pill_channels:"канала детекции", pill_actions:"действия",
+    pill_tx:"операций в тесте", pill_prauc:"PR-AUC",
+    nav_model:"Модель",
+    model_h:"Что под капотом",
+    model_sub:"Каждое число здесь считается командой python -m ml.report — это замеры, а не иллюстрации.",
+    arch_h:"Тракт принятия решения",
+    arch_tx:"Операция",
+    arch_tx_sub:"поток по времени",
+    arch_features:"Признаки",
+    arch_sup:"Похоже на известное",
+    arch_anom:"Не похоже на норму",
+    arch_merge:"«или» + калибровка",
+    arch_merge_sub:"вероятность",
+    arch_cost:"Ожидаемые потери",
+    arch_cost_sub:"4 действия, берём дешёвое",
+    arch_labels:"по разметке",
+    arch_nolabels:"без разметки",
+    arch_note:"повышать можно, понижать нельзя",
+    arch_note2:"порога нет",
+    arch_caption:"Два канала считаются независимо и сходятся по «или»: связка умеет только повышать подозрение. Вторая калибровка возвращает смеси смысл вероятности — без неё стоимостная модель перестраховывалась и трение по честным клиентам росло вчетверо.",
+    arch_alt:"Схема: операция превращается в признаки, признаки идут в два независимых канала — модель по разметке и поиск аномалий без разметки, — каналы сходятся по «или» с перекалибровкой, и вероятность попадает в расчёт ожидаемых потерь, который выбирает одно из четырёх действий.",
+    curve_h2:"Как училась модель",
+    curve_sub2:"Качество на валидации по итерациям. Пунктир — точка ранней остановки: дальше модель начинала запоминать обучающую выборку.",
+    curve_best:"лучшая",
+    curve_iter:"итерация",
+    abl_h:"Что дали сетевые признаки",
+    abl_sub:"Одни и те же данные, то же разбиение, разный набор признаков.",
+    abl_variant:"Набор",
+    abl_n:"Признаков",
+    abl_r90:"Полнота при точности 90%",
+    novel_h:"Схема, которой модель не видела",
+    novel_sub:"Вид мошенничества полностью вычеркнут из обучения — метки обнулены, будто банк про такую схему не знает. Тревога поднимается по 2% потока, нагрузка на операторов у всех одинаковая.",
+    novel_hidden:"Спрятано",
+    novel_n:"В тесте",
+    novel_sup:"Только модель",
+    novel_anom:"Только аномалии",
+    novel_both:"Два канала",
+    novel_note:"Первая строка и есть ответ на «вы ловите только то, что уже случалось». Третья — честный минус: кражу карты канал аномалий распознаёт плохо и только разбавляет ранжирование. Мы показываем и её.",
+    cap_h:"Цена страховки",
+    cap_sub:"Потолок вклада канала аномалий подобран перебором. Ниже 0.15 страховка не срабатывает, выше 0.30 платишь больше и не получаешь почти ничего.",
+    cap_cap:"Потолок",
+    cap_known:"PR-AUC знакомых",
+    cap_novel:"Незнакомая схема",
+    cap_off:"выключен",
+    no_report:"Отчёт ещё не считали: выполните python -m ml.report",
     channels:"Два независимых канала",
     ch_supervised:"по разметке",
     ch_anomaly:"аномальность",
@@ -291,6 +405,54 @@ const I18N = {
     static_note_sim:"Бұл — статикалық көрме: алты сценарий нақты модельмен алдын ала есептелген. Еркін операцияны қолмен енгізу жұмыс істеп тұрған модельді талап етеді — ол толық нұсқада бар.",
     static_note_econ:"Бұл — статикалық көрме: жүгірткілер параметрлерді көрсетеді, бірақ шешімдерді қайта есептеу жұмыс істеп тұрған модельді талап етеді — ол толық нұсқада бар.",
     static_badge:"көрме",
+    hero_title:'Картаны ұрлайтындарды да, клиентті <em>өз ақшасын аударуға көндіретіндерді</em> де ұстайтын антифрод',
+    hero_lead:"Екі тәуелсіз анықтау арнасы, уақыт бойынша ағып кетуден қорғалған 51 белгі және теңгемен күтілетін шығын бойынша әрекет таңдау. Шекті мән жоқ: әр операция үшін төрт шешімнің әрқайсысы қанша тұратыны есептеліп, ең арзаны алынады.",
+    hero_live:"шешімдердің тірі ағыны — тест кезеңіндегі нақты операциялар",
+    pill_features:"белгі", pill_channels:"анықтау арнасы", pill_actions:"әрекет",
+    pill_tx:"тестте операция", pill_prauc:"PR-AUC",
+    nav_model:"Модель",
+    model_h:"Қаптың астында не бар",
+    model_sub:"Мұндағы әр сан python -m ml.report командасымен есептеледі — бұл өлшемдер, сурет емес.",
+    arch_h:"Шешім қабылдау жолы",
+    arch_tx:"Операция",
+    arch_tx_sub:"уақыт бойынша ағын",
+    arch_features:"Белгілер",
+    arch_sup:"Таныс схемаға ұқсас",
+    arch_anom:"Нормаға ұқсамайды",
+    arch_merge:"«немесе» + калибрлеу",
+    arch_merge_sub:"ықтималдық",
+    arch_cost:"Күтілетін шығын",
+    arch_cost_sub:"4 әрекет, арзанын аламыз",
+    arch_labels:"белгілеу бойынша",
+    arch_nolabels:"белгілеусіз",
+    arch_note:"арттыруға болады, азайтуға болмайды",
+    arch_note2:"шекті мән жоқ",
+    arch_caption:"Екі арна тәуелсіз есептеліп, «немесе» арқылы қосылады: байланыс тек күдікті арттыра алады. Екінші калибрлеу қоспаға ықтималдық мағынасын қайтарады — онсыз шығын моделі шектен тыс сақтанатын.",
+    arch_alt:"Схема: операция белгілерге айналады, белгілер екі тәуелсіз арнаға барады, арналар «немесе» арқылы қосылады, ықтималдық күтілетін шығын есебіне түсіп, төрт әрекеттің бірін таңдайды.",
+    curve_h2:"Модель қалай оқыды",
+    curve_sub2:"Итерациялар бойынша валидациядағы сапа. Пунктир — ерте тоқтату нүктесі.",
+    curve_best:"ең жақсы",
+    curve_iter:"итерация",
+    abl_h:"Желілік белгілер не берді",
+    abl_sub:"Бірдей деректер, бірдей бөлу, әртүрлі белгілер жиыны.",
+    abl_variant:"Жиын",
+    abl_n:"Белгілер",
+    abl_r90:"Дәлдік 90% кезіндегі толықтық",
+    novel_h:"Модель көрмеген схема",
+    novel_sub:"Алаяқтық түрі оқытудан толық алынып тасталған. Дабыл ағынның 2%-ы бойынша көтеріледі.",
+    novel_hidden:"Жасырылған",
+    novel_n:"Тестте",
+    novel_sup:"Тек модель",
+    novel_anom:"Тек ауытқу",
+    novel_both:"Екі арна",
+    novel_note:"Бірінші жол — «сіз тек болған нәрсені ұстайсыз» деген қарсылыққа жауап. Үшінші жол — адал минус, оны да көрсетеміз.",
+    cap_h:"Сақтандыру бағасы",
+    cap_sub:"Ауытқу арнасының үлес шегі іріктеу арқылы таңдалған.",
+    cap_cap:"Шек",
+    cap_known:"Таныс PR-AUC",
+    cap_novel:"Жаңа схема",
+    cap_off:"өшірулі",
+    no_report:"Есеп әлі есептелмеген: python -m ml.report орындаңыз",
     channels:"Екі тәуелсіз арна",
     ch_supervised:"белгілеу бойынша",
     ch_anomaly:"ауытқу",
@@ -353,6 +515,54 @@ const I18N = {
     static_note_sim:"This is a static showcase: the six scenarios were computed in advance by the real model. Scoring an arbitrary transaction by hand needs the live model — that is in the full version.",
     static_note_econ:"This is a static showcase: the sliders show the parameters, but recomputing decisions needs the live model — that is in the full version.",
     static_badge:"showcase",
+    hero_title:'Anti-fraud that catches both the card thief<br>and the scammer who <em>makes the client pay</em>',
+    hero_lead:"Two independent detection channels, 51 leak-free streaming features and an action chosen by expected loss in tenge. There is no threshold: for every transaction the system prices all four decisions and takes the cheapest.",
+    hero_live:"live decision stream — real transactions from the test period",
+    pill_features:"features", pill_channels:"detection channels", pill_actions:"actions",
+    pill_tx:"transactions in test", pill_prauc:"PR-AUC",
+    nav_model:"Model",
+    model_h:"What is under the hood",
+    model_sub:"Every number here comes from python -m ml.report — measurements, not illustrations.",
+    arch_h:"The decision path",
+    arch_tx:"Transaction",
+    arch_tx_sub:"time-ordered stream",
+    arch_features:"Features",
+    arch_sup:"Looks like known fraud",
+    arch_anom:"Unlike normal behaviour",
+    arch_merge:"OR + calibration",
+    arch_merge_sub:"probability",
+    arch_cost:"Expected loss",
+    arch_cost_sub:"4 actions, cheapest wins",
+    arch_labels:"from labels",
+    arch_nolabels:"no labels",
+    arch_note:"can raise, never lower",
+    arch_note2:"no threshold",
+    arch_caption:"The two channels are computed independently and merged with a noisy-OR, which can only raise suspicion. A second calibration restores the probability scale — without it the cost model over-reacted and friction on honest clients quadrupled.",
+    arch_alt:"Diagram: a transaction becomes features, features feed two independent channels — a supervised model and an unsupervised anomaly detector — the channels merge through a noisy-OR with recalibration, and the resulting probability enters the expected-loss calculation that picks one of four actions.",
+    curve_h2:"How the model trained",
+    curve_sub2:"Validation quality per iteration. The dashed line is early stopping.",
+    curve_best:"best",
+    curve_iter:"iteration",
+    abl_h:"What the network features bought",
+    abl_sub:"Same data, same split, different feature sets.",
+    abl_variant:"Feature set",
+    abl_n:"Features",
+    abl_r90:"Recall at 90% precision",
+    novel_h:"A scheme the model never saw",
+    novel_sub:"One fraud type is fully removed from training. Alerts are capped at 2% of the stream, so the operator load is identical.",
+    novel_hidden:"Hidden",
+    novel_n:"In test",
+    novel_sup:"Supervised only",
+    novel_anom:"Anomaly only",
+    novel_both:"Both channels",
+    novel_note:"The first row answers “you only catch what already happened”. The third is an honest negative — we show it too.",
+    cap_h:"The price of the safety net",
+    cap_sub:"The anomaly cap was chosen by sweep, not by feel.",
+    cap_cap:"Cap",
+    cap_known:"PR-AUC, known",
+    cap_novel:"Novel scheme",
+    cap_off:"off",
+    no_report:"Report not computed yet: run python -m ml.report",
     channels:"Two independent channels",
     ch_supervised:"from labels",
     ch_anomaly:"anomaly",
@@ -550,6 +760,71 @@ function reliabilityChart(bins){
   return s;
 }
 
+/* Живая лента в обложке: проигрываем настоящие размеченные операции из
+   тестового периода. Это не декорация и не выдумка — те же записи лежат во
+   вкладке «Лента», просто здесь они идут потоком. */
+let TICKER = null;
+function startTicker(box, items){
+  if(TICKER){ clearInterval(TICKER); TICKER=null; }
+  if(!items.length) return;
+  // Показываем не подряд, а вперемешку интересное и обычное: сплошные
+  // «пропустить» усыпляют, сплошные блокировки врут про долю фрода.
+  const hot = items.filter(i => i.action !== "allow");
+  const calm = items.filter(i => i.action === "allow");
+  const order = [];
+  for(let i=0;i<40;i++){
+    const pool = (i % 3 === 0 && hot.length) ? hot : (calm.length ? calm : hot);
+    order.push(pool[i % pool.length]);
+  }
+  let k = 0;
+  const push = () => {
+    const it = order[k++ % order.length];
+    if(!it) return;
+    const reason = (it.reasons.find(r => r.direction === "risk") || {}).text;
+    const row = el("div",{class:"tick-row"+(it.action!=="allow"?" hot":"")},
+      el("span",{class:"c"}, String(it.timestamp).slice(11,16)),
+      el("span",{class:"a"}, nf(it.amount)+" ₸"),
+      el("span",{class:"badge b-"+it.action}, T(it.action)),
+      el("span",{class:"w"}, reason ? (reason[LANG]||reason.ru) : (it.city||"")),
+      el("span",{class:"p",style:"color:"+(it.p_fraud>0.5?"var(--block)":it.p_fraud>0.1?"var(--stepup)":"var(--dim)")},
+        (it.p_fraud*100).toFixed(0)+"%"));
+    box.insertBefore(row, box.firstChild);
+    while(box.children.length > 4) box.removeChild(box.lastChild);
+  };
+  for(let i=0;i<4;i++) push();          // страница не должна открываться пустой
+  TICKER = setInterval(push, 1700);
+}
+
+function hero(st, mt, report){
+  const box = el("div",{class:"hero"});
+  box.appendChild(el("h1",{html:T("hero_title")}));
+  box.appendChild(el("p",{class:"lead"},T("hero_lead")));
+
+  const pills = el("div",{class:"pills"});
+  const arch = (report && report.architecture) || {};
+  const add = (label, value) => pills.appendChild(
+    el("span",{class:"pill"}, el("span",{class:"d"}),
+      el("b",{},value), " ", label));
+  add(T("pill_features"), String(arch.n_features || 51));
+  add(T("pill_channels"), "2");
+  add(T("pill_actions"), "4");
+  add(T("pill_tx"), compact(st.transactions));
+  add(T("pill_prauc"), st.pr_auc.toFixed(3));
+  box.appendChild(pills);
+
+  const tick = el("div",{class:"tick"});
+  tick.appendChild(el("div",{class:"tick-head"},
+    el("span",{class:"live"}), T("hero_live")));
+  const rows = el("div",{class:"tick-rows"});
+  tick.appendChild(rows);
+  box.appendChild(tick);
+
+  api("/api/feed?limit=60&action=all&only_fraud=false")
+    .then(d => startTicker(rows, d.items))
+    .catch(() => {});
+  return box;
+}
+
 async function viewDashboard(root){
   root.appendChild(el("div",{class:"loading"},"…"));
   let st, mt;
@@ -557,6 +832,10 @@ async function viewDashboard(root){
     [st,mt] = await Promise.all([cached("stats","/api/stats"), cached("metrics","/api/metrics")]);
   }catch(e){ root.innerHTML=""; root.appendChild(el("div",{class:"note"},T("err")+": "+e.message)); return; }
   root.innerHTML="";
+
+  let rep = {};
+  try{ rep = await cached("report","/api/report"); }catch(_){}
+  root.appendChild(hero(st, mt, rep));
 
   root.appendChild(el("h2",{},T("dash_h")));
   root.appendChild(el("p",{class:"sub"},T("dash_sub")));
@@ -1192,6 +1471,199 @@ async function viewMap(root){
   tp.appendChild(sc2); root.appendChild(tp);
 }
 
+/* ---------------------------------------------------------------- модель */
+
+/* Схема тракта. Рисуем не названия блоков, а именно то, что иначе пришлось бы
+   собирать из текста: где расходятся два канала, чем они сходятся обратно и
+   почему после слияния стоит ещё одна калибровка. */
+function architectureDiagram(){
+  const W=980,H=250;
+  const s=svgRoot(W,H);
+  s.setAttribute("role","img");
+  s.setAttribute("aria-label", T("arch_alt"));
+
+  const defs=svgEl("defs");
+  const mk=(id,color)=>{
+    const m=svgEl("marker",{id,viewBox:"0 0 10 10",refX:9,refY:5,
+      markerWidth:7,markerHeight:7,orient:"auto-start-reverse"});
+    m.appendChild(svgEl("path",{d:"M0,0 L10,5 L0,10 z",fill:color}));
+    return m;
+  };
+  defs.appendChild(mk("ar","var(--muted)"));
+  defs.appendChild(mk("ar2","var(--accent)"));
+  defs.appendChild(mk("ar3","var(--hold)"));
+  s.appendChild(defs);
+
+  const box=(x,y,w,h,title,sub,color)=>{
+    s.appendChild(svgEl("rect",{x,y,width:w,height:h,rx:11,
+      fill:"var(--panel2)",stroke:color||"var(--line)","stroke-width":1.5}));
+    s.appendChild(svgText(x+w/2,y+(sub?h/2-4:h/2+4),title,
+      {"text-anchor":"middle",fill:"var(--text)","font-size":13,"font-weight":600}));
+    if(sub) s.appendChild(svgText(x+w/2,y+h/2+14,sub,
+      {"text-anchor":"middle","font-size":11}));
+  };
+  // Подпись ставится явной точкой, а не серединой отрезка: на диагональных
+  // стрелках середина приходится вплотную к блоку, и текст налезает на рамку.
+  const arrow=(x1,y1,x2,y2,marker,color,label)=>{
+    s.appendChild(svgEl("line",{x1,y1,x2,y2,stroke:color||"var(--muted)",
+      "stroke-width":1.6,"marker-end":`url(#${marker||"ar"})`}));
+    if(label) s.appendChild(svgText(label.x,label.y,label.text,
+      {"text-anchor":label.anchor||"end","font-size":10.5}));
+  };
+
+  box(0,95,132,58,T("arch_tx"),T("arch_tx_sub"));
+  box(172,95,140,58,T("arch_features"),"51");
+  // два канала
+  box(360,28,182,58,T("arch_sup"),"LightGBM","var(--primary)");
+  box(360,162,182,58,T("arch_anom"),"Isolation Forest","var(--accent)");
+  box(590,95,150,58,T("arch_merge"),T("arch_merge_sub"),"var(--hold)");
+  box(790,95,190,58,T("arch_cost"),T("arch_cost_sub"),"var(--allow)");
+
+  arrow(132,124,172,124);
+  arrow(312,120,356,66,"ar","var(--primary)",
+        {x:352,y:52,text:T("arch_labels"),anchor:"end"});
+  arrow(312,128,356,182,"ar2","var(--accent)",
+        {x:352,y:200,text:T("arch_nolabels"),anchor:"end"});
+  arrow(542,64,586,110,"ar","var(--primary)");
+  arrow(542,184,586,138,"ar2","var(--accent)");
+  arrow(740,124,786,124,"ar3","var(--hold)");
+
+  s.appendChild(svgText(665,176,T("arch_note"),
+    {"text-anchor":"middle","font-size":10.5,fill:"var(--dim)"}));
+  s.appendChild(svgText(885,176,T("arch_note2"),
+    {"text-anchor":"middle","font-size":10.5,fill:"var(--dim)"}));
+
+  const fig=el("figure",{style:"margin:0"});
+  const sc=el("div",{class:"scroll"}); sc.appendChild(s); fig.appendChild(sc);
+  fig.appendChild(el("figcaption",{class:"sub",style:"margin:10px 0 0"},T("arch_caption")));
+  return fig;
+}
+
+/* Настоящая история обучения, а не иллюстрация */
+function trainingCurve(curve){
+  const ap=curve.average_precision||[];
+  if(ap.length<3) return el("div",{class:"dim"},"—");
+  const W=620,H=220,padL=46,padB=34,padT=14,padR=12;
+  const s=svgRoot(W,H);
+  const iw=W-padL-padR, ih=H-padT-padB;
+  const lo=Math.min(...ap), hi=Math.max(...ap);
+  const span=Math.max(hi-lo,1e-6);
+  const X=i=>padL+iw*i/(ap.length-1);
+  const Y=v=>padT+ih*(1-(v-lo)/span);
+
+  for(let g=0;g<=4;g++){
+    const y=padT+ih*g/4;
+    s.appendChild(svgEl("line",{x1:padL,x2:W-padR,y1:y,y2:y,stroke:"var(--line)"}));
+    s.appendChild(svgText(padL-8,y+4,(hi-span*g/4).toFixed(3),
+      {"text-anchor":"end","font-size":10}));
+  }
+  s.appendChild(svgEl("polyline",{
+    points:ap.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" "),
+    fill:"none",stroke:"var(--primary)","stroke-width":2}));
+
+  const best=curve.best_iteration||0;
+  if(best>0 && best<ap.length){
+    s.appendChild(svgEl("line",{x1:X(best),x2:X(best),y1:padT,y2:padT+ih,
+      stroke:"var(--allow)","stroke-dasharray":"4 4","stroke-width":1.5}));
+    s.appendChild(svgText(X(best),padT-2,T("curve_best")+" "+best,
+      {"text-anchor":"middle",fill:"var(--allow)","font-size":10.5,"font-weight":600}));
+  }
+  for(let i=0;i<ap.length;i+=Math.ceil(ap.length/6))
+    s.appendChild(svgText(X(i),H-padB+18,String(i),{"text-anchor":"middle","font-size":10}));
+  s.appendChild(svgText(padL,H-padB+32,T("curve_iter"),{"font-size":10.5}));
+  return s;
+}
+
+async function viewModel(root){
+  root.appendChild(el("h2",{},T("model_h")));
+  root.appendChild(el("p",{class:"sub"},T("model_sub")));
+
+  let rep={}, mt={};
+  try{ [rep,mt] = await Promise.all([cached("report","/api/report"), cached("metrics","/api/metrics")]); }
+  catch(e){ root.appendChild(el("div",{class:"note"},T("err"))); return; }
+
+  /* архитектура */
+  const pA=el("div",{class:"panel"},el("h3",{},T("arch_h")));
+  pA.appendChild(architectureDiagram());
+  root.appendChild(pA);
+
+  /* кривая обучения */
+  const two=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-top:14px"});
+  const pC=el("div",{class:"panel"},el("h3",{},T("curve_h2")),el("p",{class:"sub"},T("curve_sub2")));
+  pC.appendChild(trainingCurve(mt.training_curve||{}));
+  two.appendChild(pC);
+
+  /* абляция */
+  const ab=rep.ablation;
+  const pB=el("div",{class:"panel"},el("h3",{},T("abl_h")),el("p",{class:"sub"},T("abl_sub")));
+  if(ab){
+    const t=el("table",{});
+    t.appendChild(el("thead",{},el("tr",{},
+      el("th",{},T("abl_variant")), el("th",{class:"num"},T("abl_n")),
+      el("th",{class:"num"},"PR-AUC"), el("th",{class:"num"},T("abl_r90")))));
+    const tb=el("tbody",{});
+    ab.variants.forEach((v,i)=>tb.appendChild(el("tr",{},
+      el("td",{style:i?"color:var(--allow);font-weight:600":""},v.name),
+      el("td",{class:"num mono"},v.n_features),
+      el("td",{class:"num mono"},v.pr_auc.toFixed(4)),
+      el("td",{class:"num mono"},v.recall_at_precision90.toFixed(3)))));
+    t.appendChild(tb);
+    const sc=el("div",{class:"scroll"}); sc.appendChild(t); pB.appendChild(sc);
+  } else pB.appendChild(el("div",{class:"dim"},T("no_report")));
+  two.appendChild(pB);
+  root.appendChild(two);
+
+  /* незнакомая схема — главный аргумент */
+  const nv=rep.novel_scheme;
+  const pN=el("div",{class:"panel",style:"margin-top:14px"},
+    el("h3",{},T("novel_h")), el("p",{class:"sub"},T("novel_sub")));
+  if(nv){
+    const t=el("table",{});
+    t.appendChild(el("thead",{},el("tr",{},
+      el("th",{},T("novel_hidden")), el("th",{class:"num"},T("novel_n")),
+      el("th",{class:"num"},T("novel_sup")), el("th",{class:"num"},T("novel_anom")),
+      el("th",{class:"num"},T("novel_both")))));
+    const tb=el("tbody",{});
+    nv.results.forEach(r=>{
+      const gain = r.blended_recall - r.supervised_recall;
+      tb.appendChild(el("tr",{},
+        el("td",{},T(r.hidden)),
+        el("td",{class:"num mono dim"},r.n_hidden_in_test),
+        el("td",{class:"num mono"},pct(r.supervised_recall,1)),
+        el("td",{class:"num mono dim"},pct(r.anomaly_recall,1)),
+        el("td",{class:"num mono",style:"font-weight:700;color:"+(gain>0?"var(--allow)":"var(--block)")},
+          pct(r.blended_recall,1)+" ("+(gain>0?"+":"")+(gain*100).toFixed(1)+")")));
+    });
+    t.appendChild(tb);
+    const sc=el("div",{class:"scroll"}); sc.appendChild(t); pN.appendChild(sc);
+    pN.appendChild(el("div",{class:"note",style:"margin-top:14px"},T("novel_note")));
+  } else pN.appendChild(el("div",{class:"dim"},T("no_report")));
+  root.appendChild(pN);
+
+  /* цена страховки */
+  const cs=rep.cap_sweep;
+  if(cs){
+    const pS=el("div",{class:"panel",style:"margin-top:14px"},
+      el("h3",{},T("cap_h")), el("p",{class:"sub"},T("cap_sub")));
+    const t=el("table",{});
+    t.appendChild(el("thead",{},el("tr",{},
+      el("th",{},T("cap_cap")), el("th",{class:"num"},T("cap_known")),
+      el("th",{class:"num"},T("cap_novel")))));
+    const tb=el("tbody",{});
+    cs.rows.forEach(r=>{
+      const chosen = r.cap === cs.chosen;
+      tb.appendChild(el("tr",{style:chosen?"background:rgba(34,197,94,.07)":""},
+        el("td",{style:chosen?"font-weight:700;color:var(--allow)":""},
+          r.cap===null?T("cap_off"):r.cap.toFixed(2)),
+        el("td",{class:"num mono"},r.pr_auc_known.toFixed(4)),
+        el("td",{class:"num mono",style:chosen?"font-weight:700":""},pct(r.novel_recall,1))));
+    });
+    t.appendChild(tb);
+    const sc=el("div",{class:"scroll"}); sc.appendChild(t); pS.appendChild(sc);
+    root.appendChild(pS);
+  }
+}
+
 /* ---------------------------------------------------------------- экономика */
 const ECON_FIELDS=[
   ["case_handling_cost",     {ru:"Разбор одного случая фрода",   kk:"Бір алаяқтық жағдайын талдау", en:"Handling one fraud case"},            0, 30000, 500],
@@ -1280,6 +1752,7 @@ async function viewEconomics(root){
 const VIEWS = [
   ["dash",  "nav_dash",  viewDashboard],
   ["sim",   "nav_sim",   viewSimulator],
+  ["model", "nav_model", viewModel],
   ["feed",  "nav_feed",  viewFeed],
   ["graph", "nav_graph", viewGraph],
   ["map",   "nav_map",   viewMap],
@@ -1300,6 +1773,7 @@ function renderNav(){
 }
 
 function go(key){
+  if(TICKER){ clearInterval(TICKER); TICKER=null; }
   CURRENT=key;
   if(location.hash.slice(1)!==key) history.replaceState(null,"","#"+key);
   renderNav();

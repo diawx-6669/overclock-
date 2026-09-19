@@ -160,3 +160,44 @@ def test_decision_map_boundary_moves_with_amount(client):
     assert boundary == sorted(boundary, reverse=True), "граница обязана быть монотонной"
     # и это именно кривая, а не одна ступенька
     assert len(set(boundary)) >= 4
+
+
+def test_report_endpoint_is_safe_without_report(client):
+    """Сайт не должен падать, если отчёт ещё не считали."""
+    body = client.get("/api/report").json()
+    assert isinstance(body, dict)
+
+
+def test_report_matches_claims_when_present(client):
+    """Если отчёт есть, его числа должны быть осмысленными.
+
+    Вкладка «Модель» показывает эти значения как доказательство, поэтому
+    пустые или бессмысленные числа там недопустимы.
+    """
+    report = client.get("/api/report").json()
+    if not report:
+        pytest.skip("отчёт не считали: python -m ml.report")
+
+    variants = report["ablation"]["variants"]
+    assert len(variants) == 2
+    assert variants[1]["n_features"] > variants[0]["n_features"]
+    # сетевые признаки обязаны помогать, иначе их незачем держать
+    assert variants[1]["pr_auc"] > variants[0]["pr_auc"]
+
+    for row in report["cap_sweep"]["rows"]:
+        assert 0.0 <= row["pr_auc_known"] <= 1.0
+        assert 0.0 <= row["novel_recall"] <= 1.0
+
+    kinds = {r["hidden"] for r in report["novel_scheme"]["results"]}
+    assert kinds == {"stolen_card", "social_eng", "fraud_ring"}
+    social = next(r for r in report["novel_scheme"]["results"]
+                  if r["hidden"] == "social_eng")
+    # главный заявленный результат: спрятанную соцтнженерию одна модель не видит,
+    # а два канала ловят заметную долю
+    assert social["blended_recall"] > social["supervised_recall"] + 0.2
+
+
+def test_metrics_carry_training_curve(client):
+    curve = client.get("/api/metrics").json().get("training_curve", {})
+    assert len(curve.get("average_precision", [])) > 10
+    assert curve["best_iteration"] > 0

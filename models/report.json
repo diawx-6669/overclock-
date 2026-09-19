@@ -1,0 +1,112 @@
+{
+  "generated_at": "2026-09-19T18:39:04.258787+00:00",
+  "ablation": {
+    "rows_test": 25000,
+    "variants": [
+      {
+        "name": "без сетевых признаков",
+        "n_features": 41,
+        "pr_auc": 0.9040772236947827,
+        "roc_auc": 0.9970193597560976,
+        "recall_at_precision90": 0.7625
+      },
+      {
+        "name": "с сетевыми признаками",
+        "n_features": 51,
+        "pr_auc": 0.9329143231037382,
+        "roc_auc": 0.9975923272357722,
+        "recall_at_precision90": 0.8575
+      }
+    ],
+    "network_features": [
+      "recipient_clients_24h",
+      "recipient_clients_7d",
+      "recipient_inbound_24h",
+      "recipient_amount_24h",
+      "recipient_age_days",
+      "recipient_is_new_to_bank",
+      "device_clients_24h",
+      "ip_clients_24h",
+      "component_clients",
+      "component_size"
+    ]
+  },
+  "cap_sweep": {
+    "alert_budget": 0.02,
+    "chosen": 0.2,
+    "rows": [
+      {
+        "cap": null,
+        "pr_auc_known": 0.9329143231037382,
+        "novel_recall": 0.005405405405405406
+      },
+      {
+        "cap": 0.1,
+        "pr_auc_known": 0.923194837927672,
+        "novel_recall": 0.02702702702702703
+      },
+      {
+        "cap": 0.15,
+        "pr_auc_known": 0.9209296942610685,
+        "novel_recall": 0.08108108108108109
+      },
+      {
+        "cap": 0.2,
+        "pr_auc_known": 0.9159392060219745,
+        "novel_recall": 0.42702702702702705
+      },
+      {
+        "cap": 0.3,
+        "pr_auc_known": 0.9113653490171523,
+        "novel_recall": 0.4648648648648649
+      },
+      {
+        "cap": 0.5,
+        "pr_auc_known": 0.8987679756964485,
+        "novel_recall": 0.6378378378378379
+      }
+    ]
+  },
+  "novel_scheme": {
+    "alert_budget": 0.02,
+    "results": [
+      {
+        "hidden": "stolen_card",
+        "n_hidden_in_test": 183,
+        "supervised_recall": 0.29508196721311475,
+        "anomaly_recall": 0.14207650273224043,
+        "blended_recall": 0.23497267759562843,
+        "supervised_recall_known": 0.9585253456221198,
+        "blended_recall_known": 0.9447004608294931
+      },
+      {
+        "hidden": "social_eng",
+        "n_hidden_in_test": 185,
+        "supervised_recall": 0.005405405405405406,
+        "anomaly_recall": 0.7837837837837838,
+        "blended_recall": 0.42702702702702705,
+        "supervised_recall_known": 0.958139534883721,
+        "blended_recall_known": 0.9069767441860465
+      },
+      {
+        "hidden": "fraud_ring",
+        "n_hidden_in_test": 32,
+        "supervised_recall": 0.15625,
+        "anomaly_recall": 0.75,
+        "blended_recall": 0.3125,
+        "supervised_recall_known": 0.9293478260869565,
+        "blended_recall_known": 0.9157608695652174
+      }
+    ]
+  },
+  "architecture": {
+    "n_features": 51,
+    "n_anomaly_features": 29,
+    "split": {
+      "train": 59998,
+      "valid": 15000,
+      "test": 25000
+    }
+  },
+  "elapsed_seconds": 16.2
+}

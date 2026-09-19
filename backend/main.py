@@ -95,6 +95,11 @@ def load_artifacts() -> None:
     feed = feed.sort_values("timestamp").reset_index(drop=True)
     STATE["feed"] = feed
 
+    report_path = MODELS_DIR / "report.json"
+    STATE["report"] = (
+        json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+    )
+
     graph_path = MODELS_DIR / "graph.json"
     STATE["graph"] = (
         json.loads(graph_path.read_text(encoding="utf-8")) if graph_path.exists() else {}
@@ -317,6 +322,18 @@ def api_health() -> dict:
 def api_metrics() -> dict:
     """Метрики качества и экономики с последнего обучения."""
     return STATE["metrics"]
+
+
+@app.get("/api/report")
+def api_report() -> dict:
+    """Замеры, которыми подкреплены заявления: абляция, подбор потолка,
+    эксперимент со схемой, которой модель не видела.
+
+    Собирается командой `python -m ml.report`. Пустой ответ означает, что
+    отчёт ещё не считали — сайт от этого не ломается, вкладка просто скажет,
+    что данных нет.
+    """
+    return STATE.get("report") or {}
 
 
 @app.get("/api/stats")

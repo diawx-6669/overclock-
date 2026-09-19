@@ -324,6 +324,18 @@ def main() -> None:
     print("Обучение модели «это фрод?»…")
     model = train_binary(X_tr, y_tr, X_va, y_va)
 
+    # Настоящая история обучения: по ней видно, где модель перестала
+    # улучшаться и почему ранняя остановка сработала именно там
+    history = getattr(model, "evals_result_", {}) or {}
+    curve = next(iter(history.values()), {})
+    training_curve = {
+        "average_precision": [float(v) for v in curve.get("average_precision", [])],
+        "logloss": [float(v) for v in curve.get("binary_logloss", [])],
+        "best_iteration": int(getattr(model, "best_iteration_", 0) or 0),
+    }
+    print(f"  итераций {len(training_curve['average_precision'])}, "
+          f"лучшая {training_curve['best_iteration']}")
+
     raw_va = model.predict_proba(X_va)[:, 1]
     raw_te = model.predict_proba(X_te)[:, 1]
 
@@ -464,6 +476,7 @@ def main() -> None:
         "brier_calibrated": float(brier_cal),
         "operating_points": rec_ops,
         "reliability": reliability,
+        "training_curve": training_curve,
         "type_accuracy": type_acc,
         "best_fixed_threshold": float(best_t),
         "cost_ours": ours,
