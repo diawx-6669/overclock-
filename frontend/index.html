@@ -229,6 +229,9 @@ const I18N = {
     static_note_sim:"Это статичная витрина: шесть сценариев посчитаны настоящей моделью заранее. Ручной ввод произвольной операции требует работающей модели — он есть в полной версии.",
     static_note_econ:"Это статичная витрина: ползунки показывают параметры, но пересчёт решений требует работающей модели — он есть в полной версии.",
     static_badge:"витрина",
+    channels:"Два независимых канала",
+    ch_supervised:"по разметке",
+    ch_anomaly:"аномальность",
   },
   kk:{
     tagline:"Әр шешімін түсіндіріп, оны теңгемен есептейтін антифрод",
@@ -288,6 +291,9 @@ const I18N = {
     static_note_sim:"Бұл — статикалық көрме: алты сценарий нақты модельмен алдын ала есептелген. Еркін операцияны қолмен енгізу жұмыс істеп тұрған модельді талап етеді — ол толық нұсқада бар.",
     static_note_econ:"Бұл — статикалық көрме: жүгірткілер параметрлерді көрсетеді, бірақ шешімдерді қайта есептеу жұмыс істеп тұрған модельді талап етеді — ол толық нұсқада бар.",
     static_badge:"көрме",
+    channels:"Екі тәуелсіз арна",
+    ch_supervised:"белгілеу бойынша",
+    ch_anomaly:"ауытқу",
   },
   en:{
     tagline:"Anti-fraud that explains every decision and prices it in tenge",
@@ -347,6 +353,9 @@ const I18N = {
     static_note_sim:"This is a static showcase: the six scenarios were computed in advance by the real model. Scoring an arbitrary transaction by hand needs the live model — that is in the full version.",
     static_note_econ:"This is a static showcase: the sliders show the parameters, but recomputing decisions needs the live model — that is in the full version.",
     static_badge:"showcase",
+    channels:"Two independent channels",
+    ch_supervised:"from labels",
+    ch_anomaly:"anomaly",
   }
 };
 
@@ -760,6 +769,24 @@ function renderStep(step, idx, total){
   c1.appendChild(gauge(step.p_fraud));
   c1.appendChild(el("div",{class:"dim",style:"font-size:12px;margin-top:2px"},
     T("margin")+": "+money(d.margin_to_next)+" ("+T(d.runner_up)+")"));
+  /* Два независимых канала. Второй существует ради схем, которых не было в
+     обучении: он не знает разметки и потому на них не слепнет. */
+  if(step.p_anomaly !== null && step.p_anomaly !== undefined){
+    const ch=el("div",{style:"margin-top:12px;font-size:12.5px"});
+    ch.appendChild(el("div",{class:"muted",style:"margin-bottom:6px"},T("channels")));
+    const bar=(label,v,color)=>{
+      const row=el("div",{style:"display:flex;align-items:center;gap:8px;margin-bottom:5px"});
+      row.appendChild(el("span",{class:"dim",style:"flex:0 0 132px;font-size:11.5px"},label));
+      const track=el("div",{style:"flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.07)"});
+      track.appendChild(el("div",{style:`width:${Math.max(2,v*100)}%;height:100%;border-radius:4px;background:${color}`}));
+      row.appendChild(track);
+      row.appendChild(el("span",{class:"mono",style:"flex:0 0 46px;text-align:right;font-size:11.5px"},v.toFixed(3)));
+      return row;
+    };
+    ch.appendChild(bar(T("ch_supervised"), step.p_supervised, "var(--primary)"));
+    ch.appendChild(bar(T("ch_anomaly"), step.p_anomaly, "var(--accent)"));
+    c1.appendChild(ch);
+  }
   cols.appendChild(c1);
 
   const c2=el("div",{});

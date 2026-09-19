@@ -82,6 +82,8 @@ def load_artifacts() -> None:
     bundle = joblib.load(bundle_path)
     STATE["model"] = bundle["model"]
     STATE["calibrator"] = bundle["calibrator"]
+    STATE["anomaly_channel"] = bundle.get("anomaly_channel")
+    STATE["combiner"] = bundle.get("combiner")
     STATE["type_model"] = bundle["type_model"]
     STATE["type_classes"] = bundle["type_classes"]
     STATE["features"] = bundle["features"]
@@ -92,6 +94,11 @@ def load_artifacts() -> None:
     feed = read_transactions(scored_path)
     feed = feed.sort_values("timestamp").reset_index(drop=True)
     STATE["feed"] = feed
+
+    graph_path = MODELS_DIR / "graph.json"
+    STATE["graph"] = (
+        json.loads(graph_path.read_text(encoding="utf-8")) if graph_path.exists() else {}
+    )
     STATE["economics"] = DEFAULT_ECONOMICS
 
 
@@ -202,7 +209,20 @@ def score_transaction(tx: dict, econ: Economics | None = None, store=None) -> di
     row = pd.DataFrame([[feats[f] for f in features]], columns=features)
 
     raw = float(STATE["model"].predict_proba(row)[0, 1])
-    p = float(STATE["calibrator"].predict([raw])[0])
+    p_supervised = float(STATE["calibrator"].predict([raw])[0])
+    p_supervised = min(max(p_supervised, 0.0), 1.0)
+
+    # Второй канал: «не похоже на нормальное поведение». Он не знает разметки
+    # и потому не слепнет на схеме, которой не было в обучении.
+    channel = STATE.get("anomaly_channel")
+    combiner = STATE.get("combiner")
+    anomaly_score = None
+    p_anomaly = None
+    p = p_supervised
+    if channel is not None and combiner is not None:
+        anomaly_score = float(channel.score(row)[0])
+        p_anomaly = float(combiner.anomaly_probability([anomaly_score])[0])
+        p = float(combiner.predict([p_supervised], [anomaly_score])[0])
     p = min(max(p, 0.0), 1.0)
 
     type_probs_arr = STATE["type_model"].predict_proba(row)[0]
@@ -218,6 +238,9 @@ def score_transaction(tx: dict, econ: Economics | None = None, store=None) -> di
         "transaction": {k: v for k, v in tx.items() if k != "economics"},
         "p_fraud": round(p, 6),
         "p_fraud_raw": round(raw, 6),
+        "p_supervised": round(p_supervised, 6),
+        "p_anomaly": round(p_anomaly, 6) if p_anomaly is not None else None,
+        "anomaly_score": round(anomaly_score, 4) if anomaly_score is not None else None,
         "fraud_type_probs": {k: round(v, 4) for k, v in type_probs.items()},
         "dominant_kind": dominant_kind(type_probs),
         "decision": decision.to_dict(),
@@ -436,32 +459,35 @@ def api_graph(min_clients: int = Query(3, ge=2, le=20), limit: int = Query(6, ge
 
     Именно так на экране проявляются кольца карт — одна точка, из которой
     расходятся лучи к десятку разных людей.
+
+    Сводка считается на этапе обучения по всему месяцу, а не по тестовому
+    срезу. Кольцо живёт во времени и не обязано целиком попасть в последнюю
+    четверть периода: построив граф только по тестовым дням, мы теряли часть
+    колец и показывали у остальных нулевую долю фрода, потому что их операции
+    остались в обучающей выборке.
     """
-    feed: pd.DataFrame = STATE["feed"]
+    summary = STATE.get("graph") or {}
     nodes: list[dict] = []
     edges: list[dict] = []
     seen_clients: set[str] = set()
 
-    for kind, column in (("device", "device_id"), ("ip", "ip")):
-        grouped = feed.groupby(column)["client_id"].nunique().sort_values(ascending=False)
-        hubs = grouped[grouped >= min_clients].head(limit).index.tolist()
+    for kind in ("device", "ip"):
+        hubs = [h for h in summary.get(kind, []) if h["clients"] >= min_clients][:limit]
         for hub in hubs:
-            subset = feed[feed[column] == hub]
-            hub_id = f"{kind}:{hub}"
-            fraud_share = float(subset["is_fraud"].mean())
+            hub_id = f"{kind}:{hub['key']}"
             nodes.append(
                 {
                     "id": hub_id,
                     "type": kind,
-                    "label": str(hub),
-                    "clients": int(subset["client_id"].nunique()),
-                    "transactions": int(len(subset)),
-                    "amount": float(subset["amount"].sum()),
-                    "fraud_share": fraud_share,
+                    "label": hub["key"],
+                    "clients": hub["clients"],
+                    "transactions": hub["transactions"],
+                    "amount": hub["amount"],
+                    "fraud_share": hub["fraud_share"],
                 }
             )
-            for client_id, part in subset.groupby("client_id"):
-                cid = str(client_id)
+            for member in hub["members"]:
+                cid = member["client_id"]
                 if cid not in seen_clients:
                     seen_clients.add(cid)
                     nodes.append(
@@ -469,17 +495,17 @@ def api_graph(min_clients: int = Query(3, ge=2, le=20), limit: int = Query(6, ge
                             "id": f"client:{cid}",
                             "type": "client",
                             "label": cid,
-                            "transactions": int(len(part)),
-                            "amount": float(part["amount"].sum()),
-                            "fraud_share": float(part["is_fraud"].mean()),
+                            "transactions": member["transactions"],
+                            "amount": member["amount"],
+                            "fraud_share": member["fraud_share"],
                         }
                     )
                 edges.append(
                     {
                         "source": hub_id,
                         "target": f"client:{cid}",
-                        "weight": int(len(part)),
-                        "amount": float(part["amount"].sum()),
+                        "weight": member["transactions"],
+                        "amount": member["amount"],
                     }
                 )
 

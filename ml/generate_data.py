@@ -280,14 +280,22 @@ def make_legit(rng: np.random.Generator, clients: list[Client], n_target: int) -
             # --- честные тоже переводят незнакомым и держат TeamViewer на ноутбуке
             recipient = ""
             if tx_type == "transfer":
-                # crc32, а не hash(): встроенный hash от строки солится заново
-                # в каждом процессе (PYTHONHASHSEED), и датасет с одним и тем же
-                # сидом получался разным от запуска к запуску
-                recipient = (
-                    f"R{rng.integers(0, 40_000):05d}"
-                    if rng.random() < 0.45
-                    else f"R{zlib.crc32(client.client_id.encode()) % 40_000:05d}"
-                )
+                roll = rng.random()
+                if roll < 0.22:
+                    # Популярный получатель: арендодатель, репетитор, мастер,
+                    # небольшой магазин без эквайринга. На такой счёт за сутки
+                    # приходят переводы от многих разных людей — ровно как на
+                    # дроп-счёт. Без таких получателей признак «много
+                    # отправителей» в одиночку выдавал бы мошенничество, и
+                    # модель выучила бы его вместо самой схемы.
+                    recipient = f"P{rng.integers(0, 400):03d}"
+                elif roll < 0.60:
+                    recipient = f"R{rng.integers(0, 40_000):05d}"
+                else:
+                    # crc32, а не hash(): встроенный hash от строки солится
+                    # заново в каждом процессе (PYTHONHASHSEED), и датасет с
+                    # одним и тем же сидом получался разным от запуска к запуску
+                    recipient = f"R{zlib.crc32(client.client_id.encode()) % 40_000:05d}"
             # Удалённый доступ бывает и у честных: сын настраивает матери
             # приложение через AnyDesk — и это выглядит ровно как мошенничество
             remote_p = 0.075 if client.age > 55 else 0.03
@@ -446,6 +454,20 @@ def make_social_eng(rng: np.random.Generator, clients: list[Client], n_target: i
     """
     rows: list[dict] = []
 
+    # Пул дроп-счетов. Мошенники не заводят новый счёт под каждую жертву:
+    # счёт живёт несколько дней, через него проходят десятки переводов, потом
+    # его блокируют и берут следующий. Именно поэтому дроп видно по тому, что
+    # на него за сутки приходят деньги от многих несвязанных людей.
+    n_mules = max(3, n_target // 18)
+    mules = [
+        {
+            "id": f"R{rng.integers(0, 40_000):05d}",
+            "start": float(rng.uniform(0, PERIOD_DAYS - 3)),
+            "life": float(rng.uniform(1.5, 5.0)),
+        }
+        for _ in range(n_mules)
+    ]
+
     # Жертвы смещены в сторону старшего возраста, но не только они
     ages = np.array([c.age for c in clients], dtype=float)
     p = np.clip((ages - 20) / 60.0, 0.05, 1.0) ** 2
@@ -461,14 +483,21 @@ def make_social_eng(rng: np.random.Generator, clients: list[Client], n_target: i
         parts = int(rng.choice([1, 2, 3, 4], p=[0.45, 0.28, 0.17, 0.10]))
         parts = min(parts, n_target - produced)
 
-        # «Безопасный счёт», на который уговорили перевести
-        mule = f"R{rng.integers(0, 40_000):05d}"
+        # «Безопасный счёт», на который уговорили перевести: берём из пула,
+        # а время операции подгоняем под период жизни этого счёта
+        mule_rec = mules[int(rng.integers(0, len(mules)))]
+        mule = mule_rec["id"]
         # Не в каждом случае жертва говорит по телефону в момент операции и не
         # всегда мошенник ставит программу удалённого доступа. Часть схем идёт
         # через мессенджер и «инструкцию в переписке» — и следов почти нет.
         call_len = float(round(rng.uniform(8, 95), 1)) if rng.random() < 0.62 else 0.0
         remote = int(rng.random() < 0.38)
-        start = _timestamp(rng, night=rng.random() < 0.12)
+        day_offset = mule_rec["start"] + float(rng.uniform(0, mule_rec["life"]))
+        hour = int(np.clip(round(rng.choice([11, 13, 16, 19]) + rng.normal(0, 2.2)), 7, 22))
+        start = PERIOD_START + pd.Timedelta(
+            days=min(day_offset, PERIOD_DAYS - 0.02),
+            hours=hour, minutes=int(rng.integers(0, 60)),
+        )
         total_mult = rng.uniform(3.0, 25.0)
 
         for b in range(parts):

@@ -69,11 +69,24 @@ FEATURES: list[str] = [
     "distance_from_prev_km",
     "travel_speed_kmh",
     "is_vpn",
-    # сеть
+    # сеть: накопительные счётчики
     "clients_per_device",
     "clients_per_ip",
     "clients_per_recipient",
     "is_new_recipient",
+    # сеть: оконные счётчики. Дроп-счёт узнаётся не по тому, что на него
+    # когда-либо переводили многие, а по тому, что многие переводят СЕЙЧАС.
+    "recipient_clients_24h",
+    "recipient_clients_7d",
+    "recipient_inbound_24h",
+    "recipient_amount_24h",
+    "recipient_age_days",
+    "recipient_is_new_to_bank",
+    "device_clients_24h",
+    "ip_clients_24h",
+    # сеть: связная компонента графа «клиент — устройство — IP — получатель»
+    "component_clients",
+    "component_size",
     # поведение сессии
     "remote_access",
     "call_minutes_before",
@@ -165,11 +178,93 @@ class ClientState:
 
 @dataclass
 class GlobalState:
-    """Сетевой срез: кто с кем делит устройство, IP и получателя."""
+    """Сетевой срез: кто с кем делит устройство, IP и получателя.
+
+    Помимо накопительных множеств здесь живут две вещи посложнее.
+
+    Первая — события с отметкой времени. Накопительный счётчик «сколько разных
+    клиентов переводили этому получателю» за месяц размывается: у популярного
+    магазина он большой и у дроп-счёта большой. Разница в том, что к дропу
+    двадцать разных людей приходят за сутки, а не за месяц. Поэтому считаем
+    в окне.
+
+    Вторая — связная компонента. Кольцо карт не всегда сидит на одном
+    устройстве: участник A делит телефон с B, B выходит с того же IP, что C,
+    C переводит туда же, куда D. Попарные счётчики такую цепочку не видят,
+    а обход компоненты видит целиком.
+    """
 
     device_clients: dict[str, set[str]] = field(default_factory=dict)
     ip_clients: dict[str, set[str]] = field(default_factory=dict)
     recipient_clients: dict[str, set[str]] = field(default_factory=dict)
+
+    # ключ вида "r:R00042" / "d:D00001A" / "i:10.0.0.1" -> очередь (время, клиент, сумма)
+    entity_events: dict[str, deque] = field(default_factory=dict)
+    entity_first_seen: dict[str, float] = field(default_factory=dict)
+
+    # union-find по узлам графа
+    dsu_parent: dict[str, str] = field(default_factory=dict)
+    dsu_rank: dict[str, int] = field(default_factory=dict)
+    dsu_nodes: dict[str, int] = field(default_factory=dict)    # узлов в компоненте
+    dsu_clients: dict[str, int] = field(default_factory=dict)  # из них клиентов
+
+    # ---- граф
+    def find(self, key: str) -> str:
+        parent = self.dsu_parent
+        if key not in parent:
+            parent[key] = key
+            self.dsu_rank[key] = 0
+            self.dsu_nodes[key] = 1
+            self.dsu_clients[key] = 1 if key.startswith("c:") else 0
+            return key
+        root = key
+        while parent[root] != root:
+            root = parent[root]
+        while parent[key] != root:      # сжатие пути
+            parent[key], key = root, parent[key]
+        return root
+
+    def union(self, a: str, b: str) -> None:
+        ra, rb = self.find(a), self.find(b)
+        if ra == rb:
+            return
+        if self.dsu_rank[ra] < self.dsu_rank[rb]:
+            ra, rb = rb, ra
+        self.dsu_parent[rb] = ra
+        if self.dsu_rank[ra] == self.dsu_rank[rb]:
+            self.dsu_rank[ra] += 1
+        self.dsu_nodes[ra] += self.dsu_nodes[rb]
+        self.dsu_clients[ra] += self.dsu_clients[rb]
+
+    def component(self, key: str) -> tuple[int, int]:
+        """(клиентов в компоненте, узлов в компоненте)."""
+        root = self.find(key)
+        return self.dsu_clients[root], self.dsu_nodes[root]
+
+    # ---- оконные счётчики
+    def window(self, key: str, now: float, seconds: float) -> list:
+        events = self.entity_events.get(key)
+        if not events:
+            return []
+        cutoff = now - seconds
+        while events and events[0][0] < cutoff:
+            events.popleft()
+        return list(events)
+
+    def first_seen(self, key: str) -> float | None:
+        return self.entity_first_seen.get(key)
+
+    def note_event(self, key: str, now: float, client_id: str, amount: float) -> None:
+        events = self.entity_events.get(key)
+        if events is None:
+            events = deque()
+            self.entity_events[key] = events
+            self.entity_first_seen[key] = now
+        events.append((now, client_id, amount))
+        # окно недели: длиннее держать незачем
+        cutoff = now - 7 * _DAY
+        while events and events[0][0] < cutoff:
+            events.popleft()
 
 
 # --------------------------------------------------------------------------
@@ -276,6 +371,30 @@ def compute_features(tx: dict, st: ClientState, gs: GlobalState) -> dict[str, fl
         clients_per_recipient = 0.0
         is_new_recipient = 0.0
 
+    # --- сеть в окне времени
+    r_key, d_key, i_key = f"r:{recipient}", f"d:{device}", f"i:{ip}"
+    if recipient:
+        ev_24h = gs.window(r_key, now, _DAY)
+        ev_7d = gs.window(r_key, now, 7 * _DAY)
+        recipient_clients_24h = float(len({c for _t, c, _a in ev_24h}))
+        recipient_clients_7d = float(len({c for _t, c, _a in ev_7d}))
+        recipient_inbound_24h = float(len(ev_24h))
+        recipient_amount_24h = math.log1p(sum(a for _t, _c, a in ev_24h))
+        first_seen = gs.first_seen(r_key)
+        recipient_age_days = (now - first_seen) / _DAY if first_seen is not None else 0.0
+        recipient_is_new_to_bank = 0.0 if first_seen is not None else 1.0
+    else:
+        recipient_clients_24h = recipient_clients_7d = 0.0
+        recipient_inbound_24h = recipient_amount_24h = 0.0
+        recipient_age_days = 0.0
+        recipient_is_new_to_bank = 0.0
+
+    device_clients_24h = float(len({c for _t, c, _a in gs.window(d_key, now, _DAY)}) or 1)
+    ip_clients_24h = float(len({c for _t, c, _a in gs.window(i_key, now, _DAY)}) or 1)
+
+    # --- связная компонента графа
+    component_clients, component_size = gs.component(f"c:{st.client_id}")
+
     # --- торговая точка
     is_new_category = 0.0 if st.categories.get(category) else 1.0
     is_transfer = 1.0 if tx_type == "transfer" else 0.0
@@ -315,6 +434,16 @@ def compute_features(tx: dict, st: ClientState, gs: GlobalState) -> dict[str, fl
         "clients_per_ip": clients_per_ip,
         "clients_per_recipient": clients_per_recipient,
         "is_new_recipient": is_new_recipient,
+        "recipient_clients_24h": recipient_clients_24h,
+        "recipient_clients_7d": recipient_clients_7d,
+        "recipient_inbound_24h": recipient_inbound_24h,
+        "recipient_amount_24h": recipient_amount_24h,
+        "recipient_age_days": recipient_age_days,
+        "recipient_is_new_to_bank": recipient_is_new_to_bank,
+        "device_clients_24h": device_clients_24h,
+        "ip_clients_24h": ip_clients_24h,
+        "component_clients": float(component_clients),
+        "component_size": float(component_size),
         "remote_access": _f(tx.get("remote_access")),
         "call_minutes_before": call_minutes,
         "has_long_call": 1.0 if call_minutes >= 5 else 0.0,
@@ -375,6 +504,17 @@ def update_state(tx: dict, st: ClientState, gs: GlobalState) -> None:
     if recipient:
         gs.recipient_clients.setdefault(recipient, set()).add(st.client_id)
 
+    # события с отметкой времени — для оконных счётчиков
+    client_node = f"c:{st.client_id}"
+    for key in (f"d:{device}" if device else "", f"i:{ip}" if ip else "",
+                f"r:{recipient}" if recipient else ""):
+        if key:
+            gs.note_event(key, now, st.client_id, amount)
+            # и ребро графа: клиент связан с устройством, IP и получателем
+            gs.union(client_node, key)
+    if not (device or ip or recipient):
+        gs.find(client_node)
+
 
 # --------------------------------------------------------------------------
 # Хранилище состояний
@@ -406,10 +546,71 @@ class _OverlayIndex:
 
 
 class _OverlayGlobalState:
+    """Сетевое состояние песочницы поверх настоящего.
+
+    Читает всё, что накопила система, пишет только к себе. Оконные счётчики
+    отдаются объединением базы и правок без единой записи в базу: штатный
+    `window` подчищает устаревшие события прямо в очереди, и для песочницы
+    такой побочный эффект недопустим — он бы незаметно портил рабочее
+    состояние при каждом прогоне демонстрации.
+
+    Union-find копируется целиком при первой же записи (около шести
+    миллисекунд на сто тысяч узлов). Наложение поверх union-find делать
+    бессмысленно: сжатие путей всё равно переписывает ссылки, и «только
+    для чтения» там не получается.
+    """
+
     def __init__(self, base: GlobalState):
+        self.base = base
         self.device_clients = _OverlayIndex(base.device_clients, {})
         self.ip_clients = _OverlayIndex(base.ip_clients, {})
         self.recipient_clients = _OverlayIndex(base.recipient_clients, {})
+        self.overlay_events: dict[str, list] = {}
+        self.overlay_first_seen: dict[str, float] = {}
+        self._dsu: GlobalState | None = None   # копия появляется при первой записи
+
+    # ---- оконные счётчики: база плюс правки, без мутаций базы
+    def window(self, key: str, now: float, seconds: float) -> list:
+        cutoff = now - seconds
+        out = [e for e in self.base.entity_events.get(key, ()) if e[0] >= cutoff]
+        out.extend(e for e in self.overlay_events.get(key, ()) if e[0] >= cutoff)
+        return out
+
+    def first_seen(self, key: str) -> float | None:
+        seen = self.base.first_seen(key)
+        return seen if seen is not None else self.overlay_first_seen.get(key)
+
+    def note_event(self, key: str, now: float, client_id: str, amount: float) -> None:
+        self.overlay_events.setdefault(key, []).append((now, client_id, amount))
+        if self.base.first_seen(key) is None and key not in self.overlay_first_seen:
+            self.overlay_first_seen[key] = now
+
+    # ---- граф: копия при первой записи
+    def _graph(self) -> GlobalState:
+        if self._dsu is None:
+            copy = GlobalState()
+            copy.dsu_parent = self.base.dsu_parent.copy()
+            copy.dsu_rank = self.base.dsu_rank.copy()
+            copy.dsu_nodes = self.base.dsu_nodes.copy()
+            copy.dsu_clients = self.base.dsu_clients.copy()
+            self._dsu = copy
+        return self._dsu
+
+    def component(self, key: str) -> tuple[int, int]:
+        if self._dsu is None:
+            # правок ещё не было — отвечаем по базе, ничего не копируя.
+            # Узел, которого база не знает, одинок по определению.
+            root = self.base.dsu_parent.get(key)
+            if root is None:
+                return (1 if key.startswith("c:") else 0), 1
+            return self.base.component(key)
+        return self._dsu.component(key)
+
+    def find(self, key: str) -> str:
+        return self._graph().find(key)
+
+    def union(self, a: str, b: str) -> None:
+        self._graph().union(a, b)
 
 
 class FeatureStore:

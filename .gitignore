@@ -15,3 +15,5 @@ models/*.joblib
 # метрики пересчитываются при каждом обучении
 models/metrics.json
 dist/
+models/graph.json
+models/experiment_novel.json

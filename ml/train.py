@@ -41,6 +41,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
+from ml.anomaly import AnomalyChannel, NoisyOr
 from ml.common import FRAUD_TYPES, read_transactions
 from ml.features import FEATURES, build_matrix
 from backend.cost import (
@@ -291,6 +292,11 @@ def main() -> None:
     parser.add_argument("--data", default=str(DATA_DIR / "transactions.csv"))
     parser.add_argument("--profiles", default=str(DATA_DIR / "clients.csv"))
     parser.add_argument("--out", default=str(MODELS_DIR / "fraud_hunter.joblib"))
+    parser.add_argument(
+        "--no-anomaly",
+        action="store_true",
+        help="отключить канал поиска аномалий без учителя (страховку от незнакомых схем)",
+    )
     args = parser.parse_args()
 
     MODELS_DIR.mkdir(exist_ok=True)
@@ -327,6 +333,21 @@ def main() -> None:
     p_te = calibrator.predict(raw_te)
     p_va = calibrator.predict(raw_va)
 
+    # --- второй канал: страховка от схем, которых не было в обучении
+    anomaly_channel = None
+    combiner = None
+    p_te_supervised = p_te.copy()
+    if not args.no_anomaly:
+        print("Обучение канала аномалий (без учителя)…")
+        anomaly_channel = AnomalyChannel().fit(X_tr)
+        anom_va = anomaly_channel.score(X_va)
+        anom_te = anomaly_channel.score(X_te)
+        combiner = NoisyOr().fit(anom_va, y_va)
+        # второй проход: вернуть смеси смысл вероятности
+        combiner.fit_final(p_va, anom_va, y_va)
+        p_te = combiner.predict(p_te, anom_te)
+        p_va = combiner.predict(p_va, anom_va)
+
     print("Обучение модели «какая это схема?»…")
     fraud_mask_fit = (y_all[tr] == 1)
     fit_idx = np.arange(len(df))[tr][fraud_mask_fit]
@@ -349,6 +370,10 @@ def main() -> None:
     print(f"PR-AUC (average prec.) {pr:.4f}   базовый уровень {y_te.mean():.4f}")
     print(f"Brier до калибровки    {brier_raw:.5f}")
     print(f"Brier после калибровки {brier_cal:.5f}")
+    if combiner is not None:
+        pr_sup = average_precision_score(y_te, p_te_supervised)
+        print(f"PR-AUC без канала аномалий {pr_sup:.4f} "
+              f"(страховка стоит {pr - pr_sup:+.4f}; что она даёт — ml/experiment_novel.py)")
 
     reliability = reliability_curve(y_te, p_te)
     print("\nНадёжность вероятностей (предсказано / фактически):")
@@ -451,14 +476,62 @@ def main() -> None:
             {"feature": n, "gain": float(v)} for n, v in importance
         ],
         "economics": DEFAULT_ECONOMICS.to_dict(),
+        "anomaly_enabled": combiner is not None,
+        "anomaly_cap": combiner.cap if combiner is not None else None,
+        "pr_auc_supervised_only": (
+            float(average_precision_score(y_te, p_te_supervised))
+            if combiner is not None else None
+        ),
     }
     (MODELS_DIR / "metrics.json").write_text(
         json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
+    # Сводка графа связей за весь месяц. Считается здесь, а не в API:
+    # кольцо живёт во времени и не обязано попасть в тестовый срез, а метки
+    # для отчёта по прошлому периоду банку доступны честно.
+    graph_summary = {"device": [], "ip": []}
+    for kind, column in (("device", "device_id"), ("ip", "ip")):
+        grouped = df.groupby(column).agg(
+            clients=("client_id", "nunique"),
+            transactions=("tx_id", "count"),
+            amount=("amount", "sum"),
+            fraud=("is_fraud", "sum"),
+        )
+        grouped = grouped[grouped["clients"] >= 2].sort_values("clients", ascending=False)
+        for key, row in grouped.head(40).iterrows():
+            members = (
+                df.loc[df[column] == key]
+                .groupby("client_id")
+                .agg(transactions=("tx_id", "count"),
+                     amount=("amount", "sum"),
+                     fraud=("is_fraud", "sum"))
+            )
+            graph_summary[kind].append({
+                "key": str(key),
+                "clients": int(row["clients"]),
+                "transactions": int(row["transactions"]),
+                "amount": float(row["amount"]),
+                "fraud_share": float(row["fraud"] / max(row["transactions"], 1)),
+                "members": [
+                    {
+                        "client_id": str(cid),
+                        "transactions": int(m["transactions"]),
+                        "amount": float(m["amount"]),
+                        "fraud_share": float(m["fraud"] / max(m["transactions"], 1)),
+                    }
+                    for cid, m in members.iterrows()
+                ],
+            })
+    (MODELS_DIR / "graph.json").write_text(
+        json.dumps(graph_summary, ensure_ascii=False), encoding="utf-8"
+    )
+
     bundle = {
         "model": model,
         "calibrator": calibrator,
+        "anomaly_channel": anomaly_channel,
+        "combiner": combiner,
         "type_model": type_model,
         "type_classes": type_classes,
         "features": FEATURES,
@@ -492,6 +565,7 @@ def main() -> None:
     print(f"\nСохранено: {args.out}")
     print(f"           {MODELS_DIR / 'feature_store.joblib'}")
     print(f"           {MODELS_DIR / 'metrics.json'}")
+    print(f"           {MODELS_DIR / 'graph.json'}")
     print(f"           {DATA_DIR / 'scored_test.csv'}")
     print(f"Готово за {time.time() - t0:.1f} с")
 
