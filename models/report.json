@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-19T18:39:04.258787+00:00",
+  "generated_at": "2026-09-19T19:14:39.107061+00:00",
   "ablation": {
     "rows_test": 25000,
     "variants": [
@@ -31,6 +31,7 @@
       "component_size"
     ]
   },
+  "elapsed_seconds": 38.1,
   "cap_sweep": {
     "alert_budget": 0.02,
     "chosen": 0.2,
@@ -107,6 +108,5 @@
       "valid": 15000,
       "test": 25000
     }
-  },
-  "elapsed_seconds": 16.2
+  }
 }

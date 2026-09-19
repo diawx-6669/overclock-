@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import time
 from pathlib import Path
@@ -62,14 +63,208 @@ def recall_at_precision(y_true, scores, target: float) -> float:
 
 
 def supervised(X, y, splits, cols=None):
-    """Обучить и откалибровать основную модель. Возвращает (p_valid, p_test)."""
+    """Обучить и откалибровать основную модель. Возвращает (p_valid, p_test).
+
+    Модель здесь одноразовая: наружу уходят только предсказания. Отпускаем её
+    сразу и зовём сборщик мусора — за один отчёт обучается около десяти
+    моделей, и если держать их все, пик памяти подбирается к пределу
+    free-тарифа Render, где сборка просто умирает без внятного сообщения.
+    """
     tr, va, te = splits
     Xc = X if cols is None else X[cols]
     model = train_binary(Xc.iloc[tr], y[tr], Xc.iloc[va], y[va])
     raw_va = model.predict_proba(Xc.iloc[va])[:, 1]
     raw_te = model.predict_proba(Xc.iloc[te])[:, 1]
     cal = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0).fit(raw_va, y[va])
-    return cal.predict(raw_va), cal.predict(raw_te)
+    out = cal.predict(raw_va), cal.predict(raw_te)
+    del model, cal, raw_va, raw_te
+    if cols is not None:
+        del Xc
+    gc.collect()
+    return out
+
+
+# --------------------------------------------------------------------------
+# Контекст: данные, признаки и разбиение — общие для всех шагов
+# --------------------------------------------------------------------------
+
+
+class Context:
+    """Данные, признаки и разбиение — всё, что нужно любому шагу.
+
+    После сборки признаков исходный датафрейм отпускается целиком. Сто тысяч
+    строк со строковыми колонками — идентификаторы, города, устройства, IP —
+    весят больше самой матрицы признаков, а дальше от них нужны только метка
+    и вид схемы. На free-тарифе Render с его 512 МБ эта разница решает,
+    доживёт сборка до конца или нет.
+    """
+
+    def __init__(self, data: str, profiles: str):
+        df = read_transactions(data).sort_values("timestamp", kind="mergesort")
+        df = df.reset_index(drop=True)
+        X, store = build_matrix(df, pd.read_csv(profiles))
+        self.X = X.reset_index(drop=True)
+        self.y = df["is_fraud"].to_numpy()
+        self.kinds = df["fraud_type"].fillna("").astype(str).to_numpy()
+        self.n_rows = len(df)
+        del store, df, X
+        gc.collect()
+        self.splits = time_split(self.n_rows)
+        self.y_te = self.y[self.splits[2]]
+
+
+# --------------------------------------------------------------------------
+# Шаги. Каждый самодостаточен и возвращает свой кусок отчёта.
+# --------------------------------------------------------------------------
+
+
+def step_ablation(ctx: Context) -> dict:
+    """Сколько дают сетевые признаки на одних и тех же данных."""
+    print("Абляция признаков…")
+    old_cols = [f for f in FEATURES if f not in NETWORK_FEATURES]
+    _, p_old = supervised(ctx.X, ctx.y, ctx.splits, old_cols)
+    _, p_new = supervised(ctx.X, ctx.y, ctx.splits)
+
+    def variant(name, cols, p):
+        return {
+            "name": name,
+            "n_features": len(cols),
+            "pr_auc": float(average_precision_score(ctx.y_te, p)),
+            "roc_auc": float(roc_auc_score(ctx.y_te, p)),
+            "recall_at_precision90": recall_at_precision(ctx.y_te, p, 0.90),
+        }
+
+    out = {
+        "ablation": {
+            "rows_test": int(len(ctx.y_te)),
+            "variants": [
+                variant("без сетевых признаков", old_cols, p_old),
+                variant("с сетевыми признаками", FEATURES, p_new),
+            ],
+            "network_features": NETWORK_FEATURES,
+        }
+    }
+    for v in out["ablation"]["variants"]:
+        print(f"  {v['name']:26} PR-AUC={v['pr_auc']:.4f} "
+              f"recall@prec90={v['recall_at_precision90']:.3f}")
+    return out
+
+
+def step_caps(ctx: Context) -> dict:
+    """Цена страховки против её пользы при разных потолках."""
+    print("Подбор потолка канала аномалий…")
+    tr, va, te = ctx.splits
+    channel = AnomalyChannel().fit(ctx.X.iloc[tr])
+    anom_va, anom_te = channel.score(ctx.X.iloc[va]), channel.score(ctx.X.iloc[te])
+
+    p_va_known, p_te_known = supervised(ctx.X, ctx.y, ctx.splits)
+    y_blind = ctx.y.copy()
+    y_blind[ctx.kinds == "social_eng"] = 0
+    p_va_blind, p_te_blind = supervised(ctx.X, y_blind, ctx.splits)
+    target = (ctx.y_te == 1) & (ctx.kinds[te] == "social_eng")
+
+    rows = [{
+        "cap": None,
+        "pr_auc_known": float(average_precision_score(ctx.y_te, p_te_known)),
+        "novel_recall": recall_at_budget(p_te_blind, target, ALERT_BUDGET),
+    }]
+    for cap in CAP_GRID:
+        known = NoisyOr(cap=cap).fit(anom_va, ctx.y[va]).fit_final(
+            p_va_known, anom_va, ctx.y[va])
+        blind = NoisyOr(cap=cap).fit(anom_va, y_blind[va]).fit_final(
+            p_va_blind, anom_va, y_blind[va])
+        rows.append({
+            "cap": cap,
+            "pr_auc_known": float(average_precision_score(
+                ctx.y_te, known.predict(p_te_known, anom_te))),
+            "novel_recall": recall_at_budget(
+                blind.predict(p_te_blind, anom_te), target, ALERT_BUDGET),
+        })
+    for r in rows:
+        label = "выключен" if r["cap"] is None else f"{r['cap']:.2f}"
+        print(f"  потолок {label:>9}  PR-AUC знакомых={r['pr_auc_known']:.4f}  "
+              f"незнакомая схема={r['novel_recall']:.1%}")
+    return {"cap_sweep": {"alert_budget": ALERT_BUDGET,
+                          "chosen": NoisyOr.DEFAULT_CAP, "rows": rows}}
+
+
+def step_novel(ctx: Context) -> dict:
+    """Что будет со схемой, которой модель никогда не видела."""
+    print("Схема, которой модель не видела…")
+    tr, va, te = ctx.splits
+    channel = AnomalyChannel().fit(ctx.X.iloc[tr])
+    anom_va, anom_te = channel.score(ctx.X.iloc[va]), channel.score(ctx.X.iloc[te])
+
+    results = []
+    for kind in FRAUD_TYPES:
+        yb = ctx.y.copy()
+        yb[ctx.kinds == kind] = 0
+        p_va_b, p_te_b = supervised(ctx.X, yb, ctx.splits)
+        combiner = NoisyOr().fit(anom_va, yb[va]).fit_final(p_va_b, anom_va, yb[va])
+        p_mix = combiner.predict(p_te_b, anom_te)
+
+        hidden = (ctx.y_te == 1) & (ctx.kinds[te] == kind)
+        known = (ctx.y_te == 1) & (ctx.kinds[te] != kind)
+        results.append({
+            "hidden": kind,
+            "n_hidden_in_test": int(hidden.sum()),
+            "supervised_recall": recall_at_budget(p_te_b, hidden, ALERT_BUDGET),
+            "anomaly_recall": recall_at_budget(anom_te, hidden, ALERT_BUDGET),
+            "blended_recall": recall_at_budget(p_mix, hidden, ALERT_BUDGET),
+            "supervised_recall_known": recall_at_budget(p_te_b, known, ALERT_BUDGET),
+            "blended_recall_known": recall_at_budget(p_mix, known, ALERT_BUDGET),
+        })
+        r = results[-1]
+        print(f"  спрятана {kind:14} с учителем {r['supervised_recall']:.1%}"
+              f" -> два канала {r['blended_recall']:.1%}")
+        del p_va_b, p_te_b, combiner, p_mix
+        gc.collect()
+
+    return {
+        "novel_scheme": {"alert_budget": ALERT_BUDGET, "results": results},
+        "architecture": {
+            "n_features": len(FEATURES),
+            "n_anomaly_features": len(ANOMALY_FEATURES),
+            "split": {"train": len(range(*tr.indices(ctx.n_rows))),
+                      "valid": len(range(*va.indices(ctx.n_rows))),
+                      "test": len(range(*te.indices(ctx.n_rows)))},
+        },
+    }
+
+
+STEPS = {"ablation": step_ablation, "caps": step_caps, "novel": step_novel}
+
+
+def run_in_subprocesses(args) -> dict:
+    """Прогнать шаги отдельными процессами и склеить результат.
+
+    За один отчёт обучается около десяти моделей. В одном процессе их пик
+    складывается и подбирается к 512 МБ free-тарифа Render, где сборка умирает
+    без внятного сообщения. Отдельный процесс на шаг — и система забирает
+    память обратно после каждого: пик равен самому тяжёлому шагу, а не сумме.
+    Сборщик мусора так не умеет: аллокатор Python не возвращает освобождённые
+    страницы операционной системе.
+
+    Упавший шаг не роняет отчёт целиком — остальные разделы всё равно
+    соберутся, а сайт умеет показывать неполный отчёт.
+    """
+    import subprocess
+    import sys
+
+    merged: dict = {"generated_at": pd.Timestamp.now("UTC").isoformat()}
+    for step in STEPS:
+        part = MODELS_DIR / f".report_{step}.json"
+        code = subprocess.run(
+            [sys.executable, "-m", "ml.report", "--step", step,
+             "--data", args.data, "--profiles", args.profiles, "--out", str(part)],
+            check=False,
+        ).returncode
+        if code != 0 or not part.exists():
+            print(f"  шаг «{step}» не выполнен (код {code}), пропускаем")
+            continue
+        merged.update(json.loads(part.read_text(encoding="utf-8")))
+        part.unlink()
+    return merged
 
 
 def main() -> None:
@@ -77,124 +272,31 @@ def main() -> None:
     parser.add_argument("--data", default="data/transactions.csv")
     parser.add_argument("--profiles", default="data/clients.csv")
     parser.add_argument("--out", default=str(MODELS_DIR / "report.json"))
+    parser.add_argument("--step", choices=tuple(STEPS),
+                        help="выполнить один шаг (внутренний запуск по процессам)")
+    parser.add_argument("--single-process", action="store_true",
+                        help="всё в одном процессе: быстрее, но пик памяти выше")
     args = parser.parse_args()
 
-    t0 = time.time()
     MODELS_DIR.mkdir(exist_ok=True)
+    t0 = time.time()
 
-    df = read_transactions(args.data).sort_values("timestamp", kind="mergesort")
-    df = df.reset_index(drop=True)
-    X, _ = build_matrix(df, pd.read_csv(args.profiles))
-    X = X.reset_index(drop=True)
-    y = df["is_fraud"].to_numpy()
-    kinds = df["fraud_type"].fillna("").astype(str).to_numpy()
-    splits = time_split(len(df))
-    tr, va, te = splits
-    y_te = y[te]
+    if args.step:
+        report = STEPS[args.step](Context(args.data, args.profiles))
+    elif args.single_process:
+        ctx = Context(args.data, args.profiles)
+        report = {"generated_at": pd.Timestamp.now("UTC").isoformat()}
+        for fn in STEPS.values():
+            report.update(fn(ctx))
+    else:
+        report = run_in_subprocesses(args)
 
-    report: dict = {"generated_at": pd.Timestamp.now("UTC").isoformat()}
-
-    # ------------------------------------------------ 1. абляция признаков
-    print("1/3  Абляция признаков…")
-    old_cols = [f for f in FEATURES if f not in NETWORK_FEATURES]
-    _, p_old = supervised(X, y, splits, old_cols)
-    _, p_new = supervised(X, y, splits)
-    report["ablation"] = {
-        "rows_test": int(len(y_te)),
-        "variants": [
-            {
-                "name": "без сетевых признаков",
-                "n_features": len(old_cols),
-                "pr_auc": float(average_precision_score(y_te, p_old)),
-                "roc_auc": float(roc_auc_score(y_te, p_old)),
-                "recall_at_precision90": recall_at_precision(y_te, p_old, 0.90),
-            },
-            {
-                "name": "с сетевыми признаками",
-                "n_features": len(FEATURES),
-                "pr_auc": float(average_precision_score(y_te, p_new)),
-                "roc_auc": float(roc_auc_score(y_te, p_new)),
-                "recall_at_precision90": recall_at_precision(y_te, p_new, 0.90),
-            },
-        ],
-        "network_features": NETWORK_FEATURES,
-    }
-    for v in report["ablation"]["variants"]:
-        print(f"     {v['name']:26} PR-AUC={v['pr_auc']:.4f} "
-              f"recall@prec90={v['recall_at_precision90']:.3f}")
-
-    # ------------------------------------------------ 2. потолок страховки
-    print("2/3  Подбор потолка канала аномалий…")
-    channel = AnomalyChannel().fit(X.iloc[tr])
-    anom_va, anom_te = channel.score(X.iloc[va]), channel.score(X.iloc[te])
-    p_va_known, p_te_known = supervised(X, y, splits)
-
-    # та же модель, но соцтнженерия спрятана — на ней мерим пользу
-    y_blind = y.copy()
-    y_blind[kinds == "social_eng"] = 0
-    p_va_blind, p_te_blind = supervised(X, y_blind, splits)
-    target = (y_te == 1) & (kinds[te] == "social_eng")
-
-    rows = [{
-        "cap": None,
-        "pr_auc_known": float(average_precision_score(y_te, p_te_known)),
-        "novel_recall": recall_at_budget(p_te_blind, target, ALERT_BUDGET),
-    }]
-    for cap in CAP_GRID:
-        known = NoisyOr(cap=cap).fit(anom_va, y[va]).fit_final(p_va_known, anom_va, y[va])
-        blind = NoisyOr(cap=cap).fit(anom_va, y_blind[va]).fit_final(
-            p_va_blind, anom_va, y_blind[va])
-        rows.append({
-            "cap": cap,
-            "pr_auc_known": float(average_precision_score(
-                y_te, known.predict(p_te_known, anom_te))),
-            "novel_recall": recall_at_budget(
-                blind.predict(p_te_blind, anom_te), target, ALERT_BUDGET),
-        })
-    report["cap_sweep"] = {"alert_budget": ALERT_BUDGET, "chosen": NoisyOr.DEFAULT_CAP,
-                           "rows": rows}
-    for r in rows:
-        label = "выключен" if r["cap"] is None else f"{r['cap']:.2f}"
-        print(f"     потолок {label:>9}  PR-AUC знакомых={r['pr_auc_known']:.4f}  "
-              f"незнакомая схема={r['novel_recall']:.1%}")
-
-    # ------------------------------------------------ 3. незнакомая схема
-    print("3/3  Схема, которой модель не видела…")
-    novel = []
-    for kind in FRAUD_TYPES:
-        yb = y.copy()
-        yb[kinds == kind] = 0
-        p_va_b, p_te_b = supervised(X, yb, splits)
-        combiner = NoisyOr().fit(anom_va, yb[va]).fit_final(p_va_b, anom_va, yb[va])
-        p_mix = combiner.predict(p_te_b, anom_te)
-        hidden = (y_te == 1) & (kinds[te] == kind)
-        known_mask = (y_te == 1) & (kinds[te] != kind)
-        novel.append({
-            "hidden": kind,
-            "n_hidden_in_test": int(hidden.sum()),
-            "supervised_recall": recall_at_budget(p_te_b, hidden, ALERT_BUDGET),
-            "anomaly_recall": recall_at_budget(anom_te, hidden, ALERT_BUDGET),
-            "blended_recall": recall_at_budget(p_mix, hidden, ALERT_BUDGET),
-            "supervised_recall_known": recall_at_budget(p_te_b, known_mask, ALERT_BUDGET),
-            "blended_recall_known": recall_at_budget(p_mix, known_mask, ALERT_BUDGET),
-        })
-        r = novel[-1]
-        print(f"     спрятана {kind:14} с учителем {r['supervised_recall']:.1%}"
-              f" -> два канала {r['blended_recall']:.1%}")
-    report["novel_scheme"] = {"alert_budget": ALERT_BUDGET, "results": novel}
-
-    report["architecture"] = {
-        "n_features": len(FEATURES),
-        "n_anomaly_features": len(ANOMALY_FEATURES),
-        "split": {"train": int(len(range(*tr.indices(len(df))))),
-                  "valid": int(len(range(*va.indices(len(df))))),
-                  "test": int(len(range(*te.indices(len(df)))))},
-    }
     report["elapsed_seconds"] = round(time.time() - t0, 1)
-
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2),
                               encoding="utf-8")
-    print(f"\nСохранено: {args.out}  (за {report['elapsed_seconds']:.0f} с)")
+    have = [k for k in ("ablation", "cap_sweep", "novel_scheme") if k in report]
+    print(f"\nСохранено: {args.out}  разделы: {', '.join(have) or 'нет'}"
+          f"  (за {report['elapsed_seconds']:.0f} с)")
 
 
 if __name__ == "__main__":

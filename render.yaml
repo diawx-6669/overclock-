@@ -10,12 +10,19 @@ services:
     runtime: python
     plan: free
     region: frankfurt
+    # Ветка указана явно: иначе Blueprint берёт ветку по умолчанию, и при
+    # любой её смене деплой молча уезжает не туда
+    branch: claude/beautiful-feynman-kxdobj
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
       python -m ml.generate_data
       python -m ml.train
-      python -m ml.report
+      # Отчёт для вкладки «Модель» — приятное дополнение, а не условие работы
+      # сайта. Если он не соберётся (например, не хватит памяти на free-тарифе),
+      # деплой обязан продолжиться: API отдаст пустой отчёт, вкладка честно
+      # скажет, что данных нет, всё остальное будет работать.
+      python -m ml.report || echo "ОТЧЁТ НЕ СОБРАН — сайт поднимется без вкладки «Модель»"
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
