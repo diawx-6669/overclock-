@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import zlib
 from dataclasses import dataclass, asdict
 
 import numpy as np
@@ -279,10 +280,13 @@ def make_legit(rng: np.random.Generator, clients: list[Client], n_target: int) -
             # --- честные тоже переводят незнакомым и держат TeamViewer на ноутбуке
             recipient = ""
             if tx_type == "transfer":
+                # crc32, а не hash(): встроенный hash от строки солится заново
+                # в каждом процессе (PYTHONHASHSEED), и датасет с одним и тем же
+                # сидом получался разным от запуска к запуску
                 recipient = (
                     f"R{rng.integers(0, 40_000):05d}"
                     if rng.random() < 0.45
-                    else f"R{abs(hash(client.client_id)) % 40_000:05d}"
+                    else f"R{zlib.crc32(client.client_id.encode()) % 40_000:05d}"
                 )
             # Удалённый доступ бывает и у честных: сын настраивает матери
             # приложение через AnyDesk — и это выглядит ровно как мошенничество

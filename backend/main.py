@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import math
+import zlib
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -181,7 +182,9 @@ def _resolve_defaults(tx: dict) -> dict:
         known = sorted(st.devices, key=lambda d: -st.devices[d][0])
         tx["device_id"] = known[0] if known else f"{tx['client_id']}-dev"
     if not tx.get("ip"):
-        tx["ip"] = f"10.{abs(hash(tx['client_id'])) % 250}.0.1"
+        # crc32 вместо hash(): один и тот же клиент обязан получать один и тот
+        # же IP-заполнитель после каждого перезапуска сервиса
+        tx["ip"] = f"10.{zlib.crc32(tx['client_id'].encode()) % 250}.0.1"
     if tx.get("tx_type") == "transfer" and not tx.get("recipient_id"):
         tx["recipient_id"] = "R00000"
     return tx

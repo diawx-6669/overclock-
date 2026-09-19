@@ -120,3 +120,33 @@ def test_fraud_is_not_trivially_separable(dataset):
         # признак может быть сильным, но не абсолютным
         assert share_f < 0.95, f"{column} выдаёт почти весь фрод"
         assert share_l > 0.0, f"{column} никогда не встречается у честных"
+
+
+def test_generation_is_reproducible_across_processes():
+    """Один сид обязан давать один датасет в любом процессе.
+
+    Встроенный hash() от строки солится заново при каждом запуске
+    (PYTHONHASHSEED), и однажды из-за него датасет с фиксированным сидом
+    получался разным от прогона к прогону: цифры в отчёте не сходились с тем,
+    что выдавала свежая сборка. Поэтому в генераторе только crc32.
+    """
+    import subprocess
+    import sys
+    import textwrap
+
+    code = textwrap.dedent(
+        """
+        from ml.generate_data import generate
+        df, _ = generate(n_clients=150, n_tx=3_000, seed=5)
+        print(int(df.amount.sum()), df.recipient_id.fillna("").str.cat())
+        """
+    )
+    runs = {
+        subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True, text=True, check=True,
+            env={"PYTHONHASHSEED": seed, "PATH": "/usr/bin:/bin:/usr/local/bin"},
+        ).stdout
+        for seed in ("0", "1", "12345")
+    }
+    assert len(runs) == 1, "датасет зависит от PYTHONHASHSEED"

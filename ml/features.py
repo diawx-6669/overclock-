@@ -478,19 +478,39 @@ class FeatureStore:
 
 
 def build_matrix(
-    df: pd.DataFrame, profiles: pd.DataFrame, store: FeatureStore | None = None
+    df: pd.DataFrame,
+    profiles: pd.DataFrame,
+    store: FeatureStore | None = None,
+    chunk: int = 5_000,
 ) -> tuple[pd.DataFrame, FeatureStore]:
     """Прогнать весь поток по времени и собрать матрицу признаков.
 
     Возвращает матрицу и состояние на конец потока — последнее уходит в API,
     чтобы онлайн-скоринг начинался не с чистого листа.
+
+    Поток разбирается кусками, а признаки пишутся сразу в готовый массив.
+    Прямолинейный вариант — превратить весь датафрейм в список словарей и
+    собрать из него второй список с признаками — на ста тысячах строк держит
+    в памяти двести тысяч словарей разом и добавляет к пику около 250 МБ.
+    Для сборки на машине с 512 МБ этого достаточно, чтобы всё упало.
     """
     store = store or FeatureStore(profiles)
     df = df.sort_values("timestamp", kind="mergesort")
-    records = df.to_dict("records")
+    n = len(df)
+    out = np.empty((n, len(FEATURES)), dtype=np.float64)
 
-    rows = [store.features_and_observe(tx) for tx in records]
-    matrix = pd.DataFrame(rows, columns=FEATURES, index=df.index)
+    pos = 0
+    for start in range(0, n, chunk):
+        part = df.iloc[start : start + chunk].to_dict("records")
+        for tx in part:
+            feats = store.features_and_observe(tx)
+            row = out[pos]
+            for j, name in enumerate(FEATURES):
+                row[j] = feats[name]
+            pos += 1
+        del part
+
+    matrix = pd.DataFrame(out, columns=FEATURES, index=df.index)
     return matrix, store
 
 
