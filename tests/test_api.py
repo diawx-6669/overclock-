@@ -201,3 +201,36 @@ def test_metrics_carry_training_curve(client):
     curve = client.get("/api/metrics").json().get("training_curve", {})
     assert len(curve.get("average_precision", [])) > 10
     assert curve["best_iteration"] > 0
+
+
+def test_novel_experiment_reports_spread_not_single_run(client):
+    """Замеры канала аномалий обязаны идти с разбросом по зёрнам.
+
+    Isolation Forest строит деревья на случайных подвыборках, и полнота по
+    спрятанной схеме гуляла от 18.9% до 46.5% в зависимости от зерна. Одно
+    число здесь — не результат, а один розыгрыш, и подавать его как результат
+    нельзя. Тест закрепляет это требование, чтобы усреднение не потерялось
+    при следующей правке.
+    """
+    report = client.get("/api/report").json()
+    if not report:
+        pytest.skip("отчёт не считали: python -m ml.report")
+
+    novel = report["novel_scheme"]
+    assert len(novel.get("seeds", [])) >= 3, "замер должен идти по нескольким зёрнам"
+    for r in novel["results"]:
+        sp = r["blended_recall_spread"]
+        assert sp["n_seeds"] >= 3
+        assert sp["min"] <= r["blended_recall"] <= sp["max"]
+
+
+def test_bench_endpoint_is_safe_and_sane(client):
+    bench = client.get("/api/bench").json()
+    if not bench:
+        pytest.skip("замер не выполняли: python -m ml.bench")
+    total = bench["stages"]["всего"]
+    assert 0 < total["p50"] < 1000, "решение должно занимать миллисекунды, а не секунды"
+    assert total["p95"] >= total["p50"]
+    # сумма этапов не может заметно превышать общее время
+    parts = sum(v["p50"] for k, v in bench["stages"].items() if k != "всего")
+    assert parts <= total["p50"] * 1.35

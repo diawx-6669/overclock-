@@ -46,6 +46,13 @@ NETWORK_FEATURES = [
 ALERT_BUDGET = 0.02
 CAP_GRID = [0.10, 0.15, 0.20, 0.30, 0.50]
 
+# Замеры канала аномалий усредняются по нескольким зёрнам.
+# Это не перестраховка: Isolation Forest строит деревья на случайных
+# подвыборках, и полнота по спрятанной схеме гуляла от 18.9% до 46.5% в
+# зависимости от зерна. Одиночный прогон здесь — не результат, а один
+# розыгрыш, и подавать его как результат было бы враньём.
+SEEDS = [0, 1, 2, 3, 4]
+
 
 def recall_at_budget(scores: np.ndarray, mask: np.ndarray, budget: float) -> float:
     if mask.sum() == 0:
@@ -54,6 +61,16 @@ def recall_at_budget(scores: np.ndarray, mask: np.ndarray, budget: float) -> flo
     flagged = np.zeros(len(scores), dtype=bool)
     flagged[np.argsort(-scores)[:k]] = True
     return float(flagged[mask].mean())
+
+
+def spread(values: list[float]) -> dict:
+    """Медиана и границы разброса — так честнее, чем одно число."""
+    a = np.array([v for v in values if not np.isnan(v)], dtype=float)
+    if a.size == 0:
+        return {"median": float("nan"), "min": float("nan"),
+                "max": float("nan"), "n_seeds": 0}
+    return {"median": float(np.median(a)), "min": float(a.min()),
+            "max": float(a.max()), "n_seeds": int(a.size)}
 
 
 def recall_at_precision(y_true, scores, target: float) -> float:
@@ -154,37 +171,48 @@ def step_caps(ctx: Context) -> dict:
     """Цена страховки против её пользы при разных потолках."""
     print("Подбор потолка канала аномалий…")
     tr, va, te = ctx.splits
-    channel = AnomalyChannel().fit(ctx.X.iloc[tr])
-    anom_va, anom_te = channel.score(ctx.X.iloc[va]), channel.score(ctx.X.iloc[te])
-
     p_va_known, p_te_known = supervised(ctx.X, ctx.y, ctx.splits)
     y_blind = ctx.y.copy()
     y_blind[ctx.kinds == "social_eng"] = 0
     p_va_blind, p_te_blind = supervised(ctx.X, y_blind, ctx.splits)
     target = (ctx.y_te == 1) & (ctx.kinds[te] == "social_eng")
 
+    per_cap: dict = {cap: {"pr": [], "novel": []} for cap in CAP_GRID}
+    for seed in SEEDS:
+        channel = AnomalyChannel(random_state=seed).fit(ctx.X.iloc[tr])
+        anom_va = channel.score(ctx.X.iloc[va])
+        anom_te = channel.score(ctx.X.iloc[te])
+        for cap in CAP_GRID:
+            known = NoisyOr(cap=cap).fit(anom_va, ctx.y[va]).fit_final(
+                p_va_known, anom_va, ctx.y[va])
+            blind = NoisyOr(cap=cap).fit(anom_va, y_blind[va]).fit_final(
+                p_va_blind, anom_va, y_blind[va])
+            per_cap[cap]["pr"].append(float(average_precision_score(
+                ctx.y_te, known.predict(p_te_known, anom_te))))
+            per_cap[cap]["novel"].append(recall_at_budget(
+                blind.predict(p_te_blind, anom_te), target, ALERT_BUDGET))
+        del channel, anom_va, anom_te
+        gc.collect()
+
     rows = [{
         "cap": None,
         "pr_auc_known": float(average_precision_score(ctx.y_te, p_te_known)),
+        "pr_auc_known_spread": None,
         "novel_recall": recall_at_budget(p_te_blind, target, ALERT_BUDGET),
+        "novel_recall_spread": None,
     }]
     for cap in CAP_GRID:
-        known = NoisyOr(cap=cap).fit(anom_va, ctx.y[va]).fit_final(
-            p_va_known, anom_va, ctx.y[va])
-        blind = NoisyOr(cap=cap).fit(anom_va, y_blind[va]).fit_final(
-            p_va_blind, anom_va, y_blind[va])
-        rows.append({
-            "cap": cap,
-            "pr_auc_known": float(average_precision_score(
-                ctx.y_te, known.predict(p_te_known, anom_te))),
-            "novel_recall": recall_at_budget(
-                blind.predict(p_te_blind, anom_te), target, ALERT_BUDGET),
-        })
+        pr, nov = spread(per_cap[cap]["pr"]), spread(per_cap[cap]["novel"])
+        rows.append({"cap": cap, "pr_auc_known": pr["median"],
+                     "pr_auc_known_spread": pr,
+                     "novel_recall": nov["median"], "novel_recall_spread": nov})
     for r in rows:
         label = "выключен" if r["cap"] is None else f"{r['cap']:.2f}"
+        sp = r["novel_recall_spread"]
+        tail = f" [{sp['min']:.1%}-{sp['max']:.1%}]" if sp else ""
         print(f"  потолок {label:>9}  PR-AUC знакомых={r['pr_auc_known']:.4f}  "
-              f"незнакомая схема={r['novel_recall']:.1%}")
-    return {"cap_sweep": {"alert_budget": ALERT_BUDGET,
+              f"незнакомая схема={r['novel_recall']:.1%}{tail}")
+    return {"cap_sweep": {"alert_budget": ALERT_BUDGET, "seeds": SEEDS,
                           "chosen": NoisyOr.DEFAULT_CAP, "rows": rows}}
 
 
@@ -192,36 +220,51 @@ def step_novel(ctx: Context) -> dict:
     """Что будет со схемой, которой модель никогда не видела."""
     print("Схема, которой модель не видела…")
     tr, va, te = ctx.splits
-    channel = AnomalyChannel().fit(ctx.X.iloc[tr])
-    anom_va, anom_te = channel.score(ctx.X.iloc[va]), channel.score(ctx.X.iloc[te])
+    channels = []
+    for seed in SEEDS:
+        ch = AnomalyChannel(random_state=seed).fit(ctx.X.iloc[tr])
+        channels.append((seed, ch.score(ctx.X.iloc[va]), ch.score(ctx.X.iloc[te])))
+        del ch
+    gc.collect()
 
     results = []
     for kind in FRAUD_TYPES:
         yb = ctx.y.copy()
         yb[ctx.kinds == kind] = 0
         p_va_b, p_te_b = supervised(ctx.X, yb, ctx.splits)
-        combiner = NoisyOr().fit(anom_va, yb[va]).fit_final(p_va_b, anom_va, yb[va])
-        p_mix = combiner.predict(p_te_b, anom_te)
-
         hidden = (ctx.y_te == 1) & (ctx.kinds[te] == kind)
         known = (ctx.y_te == 1) & (ctx.kinds[te] != kind)
+
+        anom_only, blended, blended_known = [], [], []
+        for _seed, anom_va, anom_te in channels:
+            combiner = NoisyOr().fit(anom_va, yb[va]).fit_final(p_va_b, anom_va, yb[va])
+            p_mix = combiner.predict(p_te_b, anom_te)
+            anom_only.append(recall_at_budget(anom_te, hidden, ALERT_BUDGET))
+            blended.append(recall_at_budget(p_mix, hidden, ALERT_BUDGET))
+            blended_known.append(recall_at_budget(p_mix, known, ALERT_BUDGET))
+            del combiner, p_mix
+
+        sup = recall_at_budget(p_te_b, hidden, ALERT_BUDGET)
+        bl = spread(blended)
         results.append({
             "hidden": kind,
             "n_hidden_in_test": int(hidden.sum()),
-            "supervised_recall": recall_at_budget(p_te_b, hidden, ALERT_BUDGET),
-            "anomaly_recall": recall_at_budget(anom_te, hidden, ALERT_BUDGET),
-            "blended_recall": recall_at_budget(p_mix, hidden, ALERT_BUDGET),
+            "supervised_recall": sup,
+            "anomaly_recall": spread(anom_only)["median"],
+            "anomaly_recall_spread": spread(anom_only),
+            "blended_recall": bl["median"],
+            "blended_recall_spread": bl,
             "supervised_recall_known": recall_at_budget(p_te_b, known, ALERT_BUDGET),
-            "blended_recall_known": recall_at_budget(p_mix, known, ALERT_BUDGET),
+            "blended_recall_known": spread(blended_known)["median"],
         })
-        r = results[-1]
-        print(f"  спрятана {kind:14} с учителем {r['supervised_recall']:.1%}"
-              f" -> два канала {r['blended_recall']:.1%}")
-        del p_va_b, p_te_b, combiner, p_mix
+        print(f"  спрятана {kind:14} с учителем {sup:.1%}"
+              f" -> два канала {bl['median']:.1%} [{bl['min']:.1%}-{bl['max']:.1%}]")
+        del p_va_b, p_te_b
         gc.collect()
 
     return {
-        "novel_scheme": {"alert_budget": ALERT_BUDGET, "results": results},
+        "novel_scheme": {"alert_budget": ALERT_BUDGET, "seeds": SEEDS,
+                         "results": results},
         "architecture": {
             "n_features": len(FEATURES),
             "n_anomaly_features": len(ANOMALY_FEATURES),

@@ -100,6 +100,11 @@ def load_artifacts() -> None:
         json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
     )
 
+    bench_path = MODELS_DIR / "bench.json"
+    STATE["bench"] = (
+        json.loads(bench_path.read_text(encoding="utf-8")) if bench_path.exists() else {}
+    )
+
     graph_path = MODELS_DIR / "graph.json"
     STATE["graph"] = (
         json.loads(graph_path.read_text(encoding="utf-8")) if graph_path.exists() else {}
@@ -334,6 +339,12 @@ def api_report() -> dict:
     что данных нет.
     """
     return STATE.get("report") or {}
+
+
+@app.get("/api/bench")
+def api_bench() -> dict:
+    """Замер задержки по этапам. Собирается командой `python -m ml.bench`."""
+    return STATE.get("bench") or {}
 
 
 @app.get("/api/stats")

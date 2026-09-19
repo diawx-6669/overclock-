@@ -343,6 +343,11 @@ const I18N = {
     cap_novel:"Незнакомая схема",
     cap_off:"выключен",
     no_report:"Отчёт ещё не считали: выполните python -m ml.report",
+    novel_spread:"Разброс по зёрнам",
+    lat_h:"Сколько система думает над операцией",
+    lat_sub:"Полный путь, как в проде: сборка признаков по истории клиента и сети, обе модели, расчёт ожидаемых потерь и построение объяснения.",
+    lat_stage:"Этап",
+    lat_note:"Один процесс выдерживает около {n} операций в час. Месячный поток кейса — 100 000 операций, то есть примерно 140 в час. Запас более чем двухтысячекратный, и в окно авторизации карты решение укладывается свободно.",
     channels:"Два независимых канала",
     ch_supervised:"по разметке",
     ch_anomaly:"аномальность",
@@ -453,6 +458,11 @@ const I18N = {
     cap_novel:"Жаңа схема",
     cap_off:"өшірулі",
     no_report:"Есеп әлі есептелмеген: python -m ml.report орындаңыз",
+    novel_spread:"Тұқымдар бойынша шашырау",
+    lat_h:"Жүйе операция туралы қанша ойланады",
+    lat_sub:"Өндірістегідей толық жол: белгілерді жинау, екі модель, күтілетін шығын есебі және түсіндірме құру.",
+    lat_stage:"Кезең",
+    lat_note:"Бір процесс сағатына шамамен {n} операцияны көтереді. Кейстің айлық ағыны — 100 000 операция, яғни сағатына 140.",
     channels:"Екі тәуелсіз арна",
     ch_supervised:"белгілеу бойынша",
     ch_anomaly:"ауытқу",
@@ -563,6 +573,11 @@ const I18N = {
     cap_novel:"Novel scheme",
     cap_off:"off",
     no_report:"Report not computed yet: run python -m ml.report",
+    novel_spread:"Spread across seeds",
+    lat_h:"How long a decision takes",
+    lat_sub:"The full production path: features from client and network history, both models, the expected-loss calculation and the explanation.",
+    lat_stage:"Stage",
+    lat_note:"A single process sustains about {n} transactions per hour. The case's monthly volume is 100,000, i.e. roughly 140 per hour — over two thousand times the headroom, comfortably inside a card authorisation window.",
     channels:"Two independent channels",
     ch_supervised:"from labels",
     ch_anomaly:"anomaly",
@@ -1622,7 +1637,7 @@ async function viewModel(root){
     t.appendChild(el("thead",{},el("tr",{},
       el("th",{},T("novel_hidden")), el("th",{class:"num"},T("novel_n")),
       el("th",{class:"num"},T("novel_sup")), el("th",{class:"num"},T("novel_anom")),
-      el("th",{class:"num"},T("novel_both")))));
+      el("th",{class:"num"},T("novel_both")), el("th",{class:"num"},T("novel_spread")))));
     const tb=el("tbody",{});
     nv.results.forEach(r=>{
       const gain = r.blended_recall - r.supervised_recall;
@@ -1632,13 +1647,43 @@ async function viewModel(root){
         el("td",{class:"num mono"},pct(r.supervised_recall,1)),
         el("td",{class:"num mono dim"},pct(r.anomaly_recall,1)),
         el("td",{class:"num mono",style:"font-weight:700;color:"+(gain>0?"var(--allow)":"var(--block)")},
-          pct(r.blended_recall,1)+" ("+(gain>0?"+":"")+(gain*100).toFixed(1)+")")));
+          pct(r.blended_recall,1)+" ("+(gain>0?"+":"")+(gain*100).toFixed(1)+")"),
+        el("td",{class:"num mono dim",style:"font-size:11.5px"},
+          r.blended_recall_spread
+            ? pct(r.blended_recall_spread.min,1)+"–"+pct(r.blended_recall_spread.max,1)
+            : "—")));
     });
     t.appendChild(tb);
     const sc=el("div",{class:"scroll"}); sc.appendChild(t); pN.appendChild(sc);
     pN.appendChild(el("div",{class:"note",style:"margin-top:14px"},T("novel_note")));
   } else pN.appendChild(el("div",{class:"dim"},T("no_report")));
   root.appendChild(pN);
+
+  /* задержка */
+  let bench={};
+  try{ bench = await cached("bench","/api/bench"); }catch(_){}
+  if(bench.stages){
+    const pL=el("div",{class:"panel",style:"margin-top:14px"},
+      el("h3",{},T("lat_h")), el("p",{class:"sub"},T("lat_sub")));
+    const t=el("table",{});
+    t.appendChild(el("thead",{},el("tr",{},
+      el("th",{},T("lat_stage")), el("th",{class:"num"},"p50"),
+      el("th",{class:"num"},"p95"), el("th",{class:"num"},"p99"))));
+    const tb=el("tbody",{});
+    Object.entries(bench.stages).forEach(([name,v])=>{
+      const total = name==="всего";
+      tb.appendChild(el("tr",{style:total?"background:rgba(34,197,94,.07)":""},
+        el("td",{style:total?"font-weight:700;color:var(--allow)":""},name),
+        el("td",{class:"num mono",style:total?"font-weight:700":""},v.p50.toFixed(2)+" мс"),
+        el("td",{class:"num mono"},v.p95.toFixed(2)+" мс"),
+        el("td",{class:"num mono dim"},v.p99.toFixed(2)+" мс")));
+    });
+    t.appendChild(tb);
+    const sc=el("div",{class:"scroll"}); sc.appendChild(t); pL.appendChild(sc);
+    pL.appendChild(el("div",{class:"note",style:"margin-top:14px"},
+      T("lat_note").replace("{n}", nf(bench.throughput_per_hour))));
+    root.appendChild(pL);
+  }
 
   /* цена страховки */
   const cs=rep.cap_sweep;
@@ -1656,7 +1701,11 @@ async function viewModel(root){
         el("td",{style:chosen?"font-weight:700;color:var(--allow)":""},
           r.cap===null?T("cap_off"):r.cap.toFixed(2)),
         el("td",{class:"num mono"},r.pr_auc_known.toFixed(4)),
-        el("td",{class:"num mono",style:chosen?"font-weight:700":""},pct(r.novel_recall,1))));
+        el("td",{class:"num mono",style:chosen?"font-weight:700":""},
+          pct(r.novel_recall,1)
+          + (r.novel_recall_spread
+              ? "  ["+pct(r.novel_recall_spread.min,0)+"–"+pct(r.novel_recall_spread.max,0)+"]"
+              : ""))));
     });
     t.appendChild(tb);
     const sc=el("div",{class:"scroll"}); sc.appendChild(t); pS.appendChild(sc);

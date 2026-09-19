@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-19T19:14:39.107061+00:00",
+  "generated_at": "2026-09-19T19:26:47.881231+00:00",
   "ablation": {
     "rows_test": 25000,
     "variants": [
@@ -31,70 +31,182 @@
       "component_size"
     ]
   },
-  "elapsed_seconds": 38.1,
+  "elapsed_seconds": 38.4,
   "cap_sweep": {
     "alert_budget": 0.02,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
     "chosen": 0.2,
     "rows": [
       {
         "cap": null,
         "pr_auc_known": 0.9329143231037382,
-        "novel_recall": 0.005405405405405406
+        "pr_auc_known_spread": null,
+        "novel_recall": 0.005405405405405406,
+        "novel_recall_spread": null
       },
       {
         "cap": 0.1,
-        "pr_auc_known": 0.923194837927672,
-        "novel_recall": 0.02702702702702703
+        "pr_auc_known": 0.9245012771495762,
+        "pr_auc_known_spread": {
+          "median": 0.9245012771495762,
+          "min": 0.9222439028267767,
+          "max": 0.9263589808230902,
+          "n_seeds": 5
+        },
+        "novel_recall": 0.010810810810810811,
+        "novel_recall_spread": {
+          "median": 0.010810810810810811,
+          "min": 0.010810810810810811,
+          "max": 0.010810810810810811,
+          "n_seeds": 5
+        }
       },
       {
         "cap": 0.15,
-        "pr_auc_known": 0.9209296942610685,
-        "novel_recall": 0.08108108108108109
+        "pr_auc_known": 0.9196960405429555,
+        "pr_auc_known_spread": {
+          "median": 0.9196960405429555,
+          "min": 0.9191895359008009,
+          "max": 0.9206540032429202,
+          "n_seeds": 5
+        },
+        "novel_recall": 0.07027027027027027,
+        "novel_recall_spread": {
+          "median": 0.07027027027027027,
+          "min": 0.016216216216216217,
+          "max": 0.11351351351351352,
+          "n_seeds": 5
+        }
       },
       {
         "cap": 0.2,
-        "pr_auc_known": 0.9159392060219745,
-        "novel_recall": 0.42702702702702705
+        "pr_auc_known": 0.9168560134998821,
+        "pr_auc_known_spread": {
+          "median": 0.9168560134998821,
+          "min": 0.9099891348935037,
+          "max": 0.919280442953482,
+          "n_seeds": 5
+        },
+        "novel_recall": 0.35135135135135137,
+        "novel_recall_spread": {
+          "median": 0.35135135135135137,
+          "min": 0.1891891891891892,
+          "max": 0.40540540540540543,
+          "n_seeds": 5
+        }
       },
       {
         "cap": 0.3,
-        "pr_auc_known": 0.9113653490171523,
-        "novel_recall": 0.4648648648648649
+        "pr_auc_known": 0.9082526039330506,
+        "pr_auc_known_spread": {
+          "median": 0.9082526039330506,
+          "min": 0.907011615683859,
+          "max": 0.9125613418278226,
+          "n_seeds": 5
+        },
+        "novel_recall": 0.3783783783783784,
+        "novel_recall_spread": {
+          "median": 0.3783783783783784,
+          "min": 0.21621621621621623,
+          "max": 0.4810810810810811,
+          "n_seeds": 5
+        }
       },
       {
         "cap": 0.5,
-        "pr_auc_known": 0.8987679756964485,
-        "novel_recall": 0.6378378378378379
+        "pr_auc_known": 0.8933741270035646,
+        "pr_auc_known_spread": {
+          "median": 0.8933741270035646,
+          "min": 0.8900892466800564,
+          "max": 0.898228648463167,
+          "n_seeds": 5
+        },
+        "novel_recall": 0.5783783783783784,
+        "novel_recall_spread": {
+          "median": 0.5783783783783784,
+          "min": 0.5081081081081081,
+          "max": 0.6918918918918919,
+          "n_seeds": 5
+        }
       }
     ]
   },
   "novel_scheme": {
     "alert_budget": 0.02,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
     "results": [
       {
         "hidden": "stolen_card",
         "n_hidden_in_test": 183,
         "supervised_recall": 0.29508196721311475,
-        "anomaly_recall": 0.14207650273224043,
+        "anomaly_recall": 0.16939890710382513,
+        "anomaly_recall_spread": {
+          "median": 0.16939890710382513,
+          "min": 0.10382513661202186,
+          "max": 0.20218579234972678,
+          "n_seeds": 5
+        },
         "blended_recall": 0.23497267759562843,
+        "blended_recall_spread": {
+          "median": 0.23497267759562843,
+          "min": 0.22950819672131148,
+          "max": 0.2677595628415301,
+          "n_seeds": 5
+        },
         "supervised_recall_known": 0.9585253456221198,
-        "blended_recall_known": 0.9447004608294931
+        "blended_recall_known": 0.9354838709677419
       },
       {
         "hidden": "social_eng",
         "n_hidden_in_test": 185,
         "supervised_recall": 0.005405405405405406,
-        "anomaly_recall": 0.7837837837837838,
-        "blended_recall": 0.42702702702702705,
+        "anomaly_recall": 0.7783783783783784,
+        "anomaly_recall_spread": {
+          "median": 0.7783783783783784,
+          "min": 0.7189189189189189,
+          "max": 0.8162162162162162,
+          "n_seeds": 5
+        },
+        "blended_recall": 0.35135135135135137,
+        "blended_recall_spread": {
+          "median": 0.35135135135135137,
+          "min": 0.1891891891891892,
+          "max": 0.40540540540540543,
+          "n_seeds": 5
+        },
         "supervised_recall_known": 0.958139534883721,
-        "blended_recall_known": 0.9069767441860465
+        "blended_recall_known": 0.9162790697674419
       },
       {
         "hidden": "fraud_ring",
         "n_hidden_in_test": 32,
         "supervised_recall": 0.15625,
         "anomaly_recall": 0.75,
-        "blended_recall": 0.3125,
+        "anomaly_recall_spread": {
+          "median": 0.75,
+          "min": 0.71875,
+          "max": 0.78125,
+          "n_seeds": 5
+        },
+        "blended_recall": 0.40625,
+        "blended_recall_spread": {
+          "median": 0.40625,
+          "min": 0.3125,
+          "max": 0.5,
+          "n_seeds": 5
+        },
         "supervised_recall_known": 0.9293478260869565,
         "blended_recall_known": 0.9157608695652174
       }

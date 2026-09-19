@@ -91,7 +91,12 @@ class AnomalyChannel:
         self.features = ANOMALY_FEATURES
         self.scaler = StandardScaler()
         self.forest = IsolationForest(
-            n_estimators=300,
+            # Сто деревьев, а не триста. Замер показал, что качество от их
+            # числа тут не зависит (ROC-AUC 0.930 против 0.934, PR-AUC в
+            # пределах шума), а задержка растёт линейно: обход леса занимал
+            # 18.9 мс из 23.3 мс всего решения — восемьдесят процентов
+            # времени уходило на канал, который ничего от этого не выигрывал.
+            n_estimators=100,
             contamination=contamination,
             max_samples=min(4096, 100_000),
             random_state=random_state,
