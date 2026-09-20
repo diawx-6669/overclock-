@@ -24,6 +24,7 @@ services:
       # скажет, что данных нет, всё остальное будет работать.
       python -m ml.report || echo "ОТЧЁТ НЕ СОБРАН — сайт поднимется без вкладки «Модель»"
       python -m ml.bench || echo "ЗАМЕР ЗАДЕРЖКИ НЕ ВЫПОЛНЕН — не критично"
+      python -m ml.drift || echo "МОНИТОРИНГ ДРЕЙФА НЕ ВЫПОЛНЕН — не критично"
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:

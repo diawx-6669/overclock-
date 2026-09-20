@@ -34,6 +34,7 @@ GET_PATHS = [
     "/api/metrics",
     "/api/report",
     "/api/bench",
+    "/api/drift",
     "/api/economics",
     "/api/graph?min_clients=3&limit=6",
     "/api/map",
@@ -46,7 +47,7 @@ DECISION_TX_TYPES = ["purchase", "transfer", "withdrawal"]
 
 def collect(client) -> dict:
     """Обойти приложение и собрать все ответы, которые нужны витрине."""
-    bundle: dict = {"get": {}, "sequences": []}
+    bundle: dict = {"get": {}, "posts": []}
 
     for path in GET_PATHS:
         bundle["get"][path] = client.get(path).json()
@@ -61,14 +62,24 @@ def collect(client) -> dict:
             path = f"/api/decision-map?kind={kind}&tx_type={tx_type}"
             bundle["get"][path] = client.get(path).json()
 
-    # Сценарии симулятора. Тело кладём структурой, а не строкой: сравнивать
-    # их будет браузер, приведя обе стороны к своему представлению чисел.
+    # Сценарии симулятора и контрфакты к ним. Тело кладём структурой, а не
+    # строкой: сравнивать их будет браузер, приведя обе стороны к своему
+    # представлению чисел.
     for preset in bundle["get"]["/api/presets"]["presets"]:
         body = {"transactions": preset["sequence"]}
-        result = client.post("/api/score-sequence", json=body).json()
-        bundle["sequences"].append(
-            {"key": preset["key"], "body": body, "result": result}
-        )
+        sequence = client.post("/api/score-sequence", json=body).json()
+        bundle["posts"].append({
+            "path": "/api/score-sequence", "body": body, "result": sequence,
+        })
+        # Интерфейс спрашивает контрфакты для той транзакции, которую вернул
+        # скоринг, а она уже дозаполнена значениями по умолчанию. Если взять
+        # исходную запись пресета, тела запросов не совпадут и витрина
+        # решит, что ответа нет.
+        last = sequence["steps"][-1]["transaction"]
+        bundle["posts"].append({
+            "path": "/api/counterfactual", "body": last,
+            "result": client.post("/api/counterfactual", json=last).json(),
+        })
     return bundle
 
 
@@ -123,7 +134,7 @@ def main() -> None:
 
     size = out.stat().st_size
     print(f"Ответов GET:      {len(bundle['get'])}")
-    print(f"Сценариев:        {len(bundle['sequences'])}")
+    print(f"POST-ответов:     {len(bundle['posts'])}")
     print(f"Файл:             {out}  ({size / 1024:.0f} КБ)")
     if size > 16 * 1024 * 1024:
         raise SystemExit("Страница больше 16 МБ — витрина столько не выдержит")

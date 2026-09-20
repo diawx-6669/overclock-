@@ -26,6 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from backend.counterfactual import find_counterfactuals
 from backend.cost import (
     ACTION_LABELS_RU,
     ACTIONS,
@@ -98,6 +99,11 @@ def load_artifacts() -> None:
     report_path = MODELS_DIR / "report.json"
     STATE["report"] = (
         json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+    )
+
+    drift_path = MODELS_DIR / "drift.json"
+    STATE["drift"] = (
+        json.loads(drift_path.read_text(encoding="utf-8")) if drift_path.exists() else {}
     )
 
     bench_path = MODELS_DIR / "bench.json"
@@ -271,6 +277,31 @@ def api_score(payload: TransactionIn) -> dict:
     return score_transaction(tx, econ)
 
 
+@app.post("/api/counterfactual")
+def api_counterfactual(payload: TransactionIn) -> dict:
+    """Что должно было измениться, чтобы система решила мягче.
+
+    SHAP отвечает «почему так решили», контрфакт — «а что надо было иначе».
+    Второй вопрос оператору и клиенту нужен чаще. Считается отдельной ручкой:
+    каждый кандидат прогоняется через полный тракт, и на горячем пути
+    авторизации этому делать нечего.
+    """
+    tx = payload.model_dump()
+    econ = _economics_from(tx.pop("economics", None))
+    tx = _resolve_defaults(tx)
+
+    def scorer(candidate: dict) -> dict:
+        return score_transaction(_resolve_defaults(dict(candidate)), econ)
+
+    baseline = scorer(tx)
+    result = find_counterfactuals(tx, scorer, baseline)
+    result["baseline"] = {
+        "action": baseline["decision"]["action"],
+        "p_fraud": baseline["p_fraud"],
+    }
+    return result
+
+
 @app.post("/api/score-sequence")
 def api_score_sequence(payload: SequenceIn) -> dict:
     """Проиграть серию операций так, как её увидела бы система в реальном времени.
@@ -345,6 +376,15 @@ def api_report() -> dict:
 def api_bench() -> dict:
     """Замер задержки по этапам. Собирается командой `python -m ml.bench`."""
     return STATE.get("bench") or {}
+
+
+@app.get("/api/drift")
+def api_drift() -> dict:
+    """Мониторинг дрейфа: сдвиг данных по PSI и сдвиг качества по неделям.
+
+    Собирается командой `python -m ml.drift`.
+    """
+    return STATE.get("drift") or {}
 
 
 @app.get("/api/stats")

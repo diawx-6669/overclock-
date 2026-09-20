@@ -348,6 +348,24 @@ const I18N = {
     lat_sub:"Полный путь, как в проде: сборка признаков по истории клиента и сети, обе модели, расчёт ожидаемых потерь и построение объяснения.",
     lat_stage:"Этап",
     lat_note:"Один процесс выдерживает около {n} операций в час. Месячный поток кейса — 100 000 операций, то есть примерно 140 в час. Запас более чем двухтысячекратный, и в окно авторизации карты решение укладывается свободно.",
+    cf_h:"Что надо было сделать иначе",
+    cf_sub:"SHAP объясняет, почему система так решила. Контрфакт отвечает на другой вопрос — при каком изменении решение было бы мягче. Эту фразу можно сказать клиенту вслух.",
+    cf_unavailable:"В статичной витрине контрфакты посчитаны заранее только для готовых сценариев.",
+    drift_h:"Мониторинг дрейфа",
+    drift_sub:"Два соседних окна равной длины. Брать весь обучающий период против тестового нечестно: в него попадает начало месяца, когда истории у клиентов ещё нет.",
+    drift_feature:"Признак",
+    drift_verdict:"Вывод",
+    drift_stable:"стабильны",
+    drift_moderate:"умеренный сдвиг",
+    drift_significant:"значимый сдвиг",
+    drift_warmup:"накопительный — сдвиг ожидаем",
+    drift_note:"Накопительные признаки растут по ходу потока просто потому, что у клиента прибавляется истории: устройство «стареет», компонента графа обрастает связями. Если дежурный каждый день видит шесть красных признаков, красных по построению, он перестаёт смотреть на список — и пропустит седьмой, настоящий. Поэтому они помечены отдельно и в счёт не идут.",
+    drift_cal_h:"Сдвиг качества",
+    drift_cal_sub:"Предсказанная доля фрода против фактической по неделям. Расхождение здесь опаснее сдвига данных: стоимостная модель считает потери именно по вероятности, и все решения тихо разъезжаются.",
+    drift_week:"Неделя",
+    drift_pred:"Предсказано",
+    drift_act:"Фактически",
+    drift_gap:"Расхождение",
     channels:"Два независимых канала",
     ch_supervised:"по разметке",
     ch_anomaly:"аномальность",
@@ -463,6 +481,24 @@ const I18N = {
     lat_sub:"Өндірістегідей толық жол: белгілерді жинау, екі модель, күтілетін шығын есебі және түсіндірме құру.",
     lat_stage:"Кезең",
     lat_note:"Бір процесс сағатына шамамен {n} операцияны көтереді. Кейстің айлық ағыны — 100 000 операция, яғни сағатына 140.",
+    cf_h:"Не істеу керек еді",
+    cf_sub:"SHAP неге осылай шешілгенін түсіндіреді. Контрфакт басқа сұраққа жауап береді — қандай өзгеріс кезінде шешім жұмсақ болар еді.",
+    cf_unavailable:"Статикалық көрмеде контрфакттар тек дайын сценарийлер үшін алдын ала есептелген.",
+    drift_h:"Дрейф мониторингі",
+    drift_sub:"Ұзындығы бірдей екі көрші терезе.",
+    drift_feature:"Белгі",
+    drift_verdict:"Қорытынды",
+    drift_stable:"тұрақты",
+    drift_moderate:"орташа жылжу",
+    drift_significant:"елеулі жылжу",
+    drift_warmup:"жинақтаушы — жылжу күтілген",
+    drift_note:"Жинақтаушы белгілер ағын барысында жай ғана өседі, өйткені клиентте тарих қосылады. Сондықтан олар бөлек белгіленген және есепке кірмейді.",
+    drift_cal_h:"Сапа жылжуы",
+    drift_cal_sub:"Апта бойынша болжанған алаяқтық үлесі нақтысына қарсы.",
+    drift_week:"Апта",
+    drift_pred:"Болжанған",
+    drift_act:"Нақты",
+    drift_gap:"Айырма",
     channels:"Екі тәуелсіз арна",
     ch_supervised:"белгілеу бойынша",
     ch_anomaly:"ауытқу",
@@ -578,6 +614,24 @@ const I18N = {
     lat_sub:"The full production path: features from client and network history, both models, the expected-loss calculation and the explanation.",
     lat_stage:"Stage",
     lat_note:"A single process sustains about {n} transactions per hour. The case's monthly volume is 100,000, i.e. roughly 140 per hour — over two thousand times the headroom, comfortably inside a card authorisation window.",
+    cf_h:"What would have had to be different",
+    cf_sub:"SHAP explains why the system decided this way. A counterfactual answers the other question — what change would have softened the decision. This is a sentence you can say to the client out loud.",
+    cf_unavailable:"In the static showcase counterfactuals are precomputed only for the ready-made scenarios.",
+    drift_h:"Drift monitoring",
+    drift_sub:"Two adjacent windows of equal length. Comparing the whole training period against the test period would be unfair: it includes the start of the month, when clients have no history yet.",
+    drift_feature:"Feature",
+    drift_verdict:"Verdict",
+    drift_stable:"stable",
+    drift_moderate:"moderate shift",
+    drift_significant:"significant shift",
+    drift_warmup:"accumulating — shift expected",
+    drift_note:"Accumulating features grow as the stream progresses simply because the client gains history. If the on-duty analyst sees six red features every day that are red by construction, they stop reading the list — and miss the seventh, real one. So these are flagged separately and excluded from the count.",
+    drift_cal_h:"Quality drift",
+    drift_cal_sub:"Predicted fraud share against the actual one, by week. A gap here is more dangerous than a data shift: the cost model prices losses off the probability, so every decision quietly drifts with it.",
+    drift_week:"Week",
+    drift_pred:"Predicted",
+    drift_act:"Actual",
+    drift_gap:"Gap",
     channels:"Two independent channels",
     ch_supervised:"from labels",
     ch_anomaly:"anomaly",
@@ -637,7 +691,9 @@ function staticApi(path, opts){
     let want;
     try{ want = JSON.stringify(JSON.parse(opts.body)); }
     catch(_){ return Promise.reject(new Error("STATIC_BAD_BODY")); }
-    const hit = (B.sequences||[]).find(s => JSON.stringify(s.body) === want);
+    const base = path.split("?")[0];
+    const hit = (B.posts||[]).find(
+      s => s.path === base && JSON.stringify(s.body) === want);
     if(hit) return Promise.resolve(hit.result);
     return Promise.reject(new Error("STATIC_NO_MODEL"));
   }
@@ -1110,6 +1166,34 @@ function renderStep(step, idx, total){
   if(!msg && !op) c4.appendChild(el("div",{class:"note"},"—"));
   cols2.appendChild(c4);
   wrap.appendChild(cols2);
+
+  /* Контрфакты: SHAP отвечает «почему так решили», а это — «что надо было
+     иначе». Оператору и клиенту второй вопрос нужен чаще. */
+  if(idx === total - 1){
+    const cf = el("div",{style:"margin-top:16px"});
+    cf.appendChild(el("h3",{},T("cf_h")));
+    cf.appendChild(el("p",{class:"sub",style:"margin-bottom:10px"},T("cf_sub")));
+    const slot = el("div",{class:"dim",style:"font-size:13px"},"…");
+    cf.appendChild(slot);
+    wrap.appendChild(cf);
+
+    api("/api/counterfactual",{method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(step.transaction)})
+      .then(res=>{
+        slot.innerHTML=""; slot.className="";
+        (res.items||[]).forEach(c=>{
+          const row=el("div",{class:"reason",style:"align-items:center"},
+            el("span",{class:"m",style:"background:var(--accent)"}),
+            el("span",{},c.text[LANG]||c.text.ru),
+            el("span",{class:"c"},
+              el("span",{class:"badge b-"+c.action_to,style:"font-size:11px"},T(c.action_to))));
+          slot.appendChild(row);
+        });
+        if(res.note) slot.appendChild(el("div",{class:"note"},res.note[LANG]||res.note.ru));
+      })
+      .catch(()=>{ slot.textContent = T("cf_unavailable"); });
+  }
   return wrap;
 }
 
@@ -1683,6 +1767,63 @@ async function viewModel(root){
     pL.appendChild(el("div",{class:"note",style:"margin-top:14px"},
       T("lat_note").replace("{n}", nf(bench.throughput_per_hour))));
     root.appendChild(pL);
+  }
+
+  /* дрейф */
+  let drift={};
+  try{ drift = await cached("drift","/api/drift"); }catch(_){}
+  if(drift.feature_psi){
+    const pD=el("div",{class:"panel",style:"margin-top:14px"},
+      el("h3",{},T("drift_h")), el("p",{class:"sub"},T("drift_sub")));
+
+    const c=drift.counts||{};
+    const sum=el("div",{class:"pills",style:"margin:0 0 14px"});
+    const chip=(label,n,color)=>sum.appendChild(el("span",{class:"pill"},
+      el("span",{class:"d",style:"background:"+color}), el("b",{},String(n)), " ", label));
+    chip(T("drift_stable"), c.stable||0, "var(--allow)");
+    chip(T("drift_moderate"), c.moderate||0, "var(--stepup)");
+    chip(T("drift_significant"), c.significant||0, "var(--block)");
+    pD.appendChild(sum);
+
+    const t=el("table",{});
+    t.appendChild(el("thead",{},el("tr",{},
+      el("th",{},T("drift_feature")), el("th",{class:"num"},"PSI"),
+      el("th",{},T("drift_verdict")))));
+    const tb=el("tbody",{});
+    drift.feature_psi.slice(0,8).forEach(r=>{
+      const color = r.accumulating ? "var(--dim)"
+        : r.verdict==="significant" ? "var(--block)"
+        : r.verdict==="moderate" ? "var(--stepup)" : "var(--allow)";
+      tb.appendChild(el("tr",{},
+        el("td",{class:"mono",style:"font-size:12.5px"},r.feature),
+        el("td",{class:"num mono",style:"color:"+color},r.psi.toFixed(4)),
+        el("td",{style:"font-size:12px;color:var(--muted)"},
+          r.accumulating ? T("drift_warmup") : T("drift_"+r.verdict))));
+    });
+    t.appendChild(tb);
+    const sc=el("div",{class:"scroll"}); sc.appendChild(t); pD.appendChild(sc);
+    pD.appendChild(el("div",{class:"note",style:"margin-top:14px"},T("drift_note")));
+
+    if((drift.calibration||[]).length){
+      pD.appendChild(el("h3",{style:"margin-top:18px"},T("drift_cal_h")));
+      pD.appendChild(el("p",{class:"sub"},T("drift_cal_sub")));
+      const t2=el("table",{});
+      t2.appendChild(el("thead",{},el("tr",{},
+        el("th",{},T("drift_week")), el("th",{class:"num"},T("tx")),
+        el("th",{class:"num"},T("drift_pred")), el("th",{class:"num"},T("drift_act")),
+        el("th",{class:"num"},T("drift_gap")))));
+      const tb2=el("tbody",{});
+      drift.calibration.forEach(w=>tb2.appendChild(el("tr",{},
+        el("td",{class:"mono"},w.period),
+        el("td",{class:"num mono dim"},nf(w.count)),
+        el("td",{class:"num mono"},w.predicted.toFixed(4)),
+        el("td",{class:"num mono"},w.actual.toFixed(4)),
+        el("td",{class:"num mono",style:"color:"+(Math.abs(w.gap)>0.01?"var(--block)":"var(--allow)")},
+          (w.gap>0?"+":"")+w.gap.toFixed(4)))));
+      t2.appendChild(tb2);
+      const sc2=el("div",{class:"scroll"}); sc2.appendChild(t2); pD.appendChild(sc2);
+    }
+    root.appendChild(pD);
   }
 
   /* цена страховки */
