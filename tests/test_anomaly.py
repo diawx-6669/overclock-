@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from ml.anomaly import ANOMALY_FEATURES, AnomalyChannel, NoisyOr
 from ml.features import FEATURES

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ml.features import FEATURES, ClientState, FeatureStore, GlobalState, compute_features
+from ml.features import FEATURES, FeatureStore
 
 
 def _tx(**kw) -> dict:

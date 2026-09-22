@@ -385,7 +385,7 @@ def main() -> None:
     if combiner is not None:
         pr_sup = average_precision_score(y_te, p_te_supervised)
         print(f"PR-AUC без канала аномалий {pr_sup:.4f} "
-              f"(страховка стоит {pr - pr_sup:+.4f}; что она даёт — ml/experiment_novel.py)")
+              f"(страховка стоит {pr - pr_sup:+.4f}; что она даёт — ml/report.py)")
 
     reliability = reliability_curve(y_te, p_te)
     print("\nНадёжность вероятностей (предсказано / фактически):")

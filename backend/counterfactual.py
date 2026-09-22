@@ -24,6 +24,7 @@ import math
 from typing import Callable
 
 from backend.cost import ACTIONS
+from ml.common import ALL_PLACES
 
 # Порядок строгости. Контрфакт интересен, когда действие становится мягче.
 SEVERITY = {a: i for i, a in enumerate(ACTIONS)}
@@ -31,6 +32,13 @@ SEVERITY = {a: i for i, a in enumerate(ACTIONS)}
 # Сколько шагов двоичного поиска по сумме. Двенадцать дают точность около
 # 0.03% от исходной суммы — заведомо больше, чем нужно для фразы оператору.
 AMOUNT_STEPS = 12
+
+# Сколько раз делим сумму пополам в поисках заведомо более мягкого случая.
+# Двадцать шагов уводят миллион до рубля.
+AMOUNT_BRACKET_STEPS = 20
+
+# Ниже этой суммы разговор теряет смысл, а «не превышала 0 ₸» — не объяснение.
+MIN_AMOUNT = 100.0
 
 
 def _text(field: str, value=None) -> dict[str, str]:
@@ -104,6 +112,20 @@ def _candidates(tx: dict, client: dict | None) -> list[tuple[str, object, object
     return out
 
 
+def _apply(tx: dict, field: str, value) -> dict:
+    """Применить изменение так, чтобы операция осталась непротиворечивой.
+
+    Поля связаны между собой. Переписать город, не переписав страну, значит
+    получить «Шымкент, Турция»: признак «операция из-за рубежа» останется
+    поднятым, и контрфакт будет объяснять несуществующую операцию.
+    """
+    probe = dict(tx)
+    probe[field] = value
+    if field == "city":
+        probe["country"] = ALL_PLACES.get(str(value), (0, 0, "KZ"))[2]
+    return probe
+
+
 NOTES = {
     "already_softest": {
         "ru": "Операция и так пропускается — смягчать нечего",
@@ -148,8 +170,7 @@ def find_counterfactuals(
 
     # --- одиночные переключения
     for field, was, becomes in _candidates(tx, client):
-        probe = dict(tx)
-        probe[field] = becomes
+        probe = _apply(tx, field, becomes)
         result = score(probe)
         action = result["decision"]["action"]
         if SEVERITY[action] < base_rank:
@@ -164,17 +185,31 @@ def find_counterfactuals(
                 "text": _text(field),
             })
 
-    # --- сумма: ищем границу, а не перебираем наугад
+    # --- сумма: сначала ищем вилку, потом её границу
     amount = float(tx.get("amount") or 0)
     if amount > 0:
-        lo, hi = amount * 0.01, amount      # при lo решение почти наверняка мягче
+        # Фиксированная нижняя граница в 1% не годится: на честной
+        # командировке решение оставалось прежним и при 1% суммы, поиск
+        # пропускался, и система заявляла, что сумма не помогает вообще —
+        # хотя ниже граница есть. Спускаемся половинками, пока не найдём
+        # заведомо более мягкий случай.
+        lo, lo_action = None, None
         probe = dict(tx)
-        probe["amount"] = lo
-        if SEVERITY[score(probe)["decision"]["action"]] < base_rank:
+        candidate = amount
+        for _ in range(AMOUNT_BRACKET_STEPS):
+            candidate /= 2.0
+            if candidate < MIN_AMOUNT:
+                break
+            probe["amount"] = candidate
+            action = score(probe)["decision"]["action"]
+            if SEVERITY[action] < base_rank:
+                lo, lo_action = candidate, action
+                break
+
+        if lo is not None:
             # двоичный поиск по логарифму: шаг по сумме не линейный по смыслу
-            log_lo, log_hi = math.log(lo), math.log(hi)
-            best = lo
-            best_action = base_action
+            log_lo, log_hi = math.log(lo), math.log(amount)
+            best, best_action = lo, lo_action
             for _ in range(AMOUNT_STEPS):
                 mid = math.exp((log_lo + log_hi) / 2)
                 probe["amount"] = mid
@@ -184,17 +219,27 @@ def find_counterfactuals(
                     log_lo = math.log(mid)
                 else:
                     log_hi = math.log(mid)
-            probe["amount"] = best
+
+            # Округляем вниз и обязательно перепроверяем: округление вверх
+            # может перешагнуть найденную границу, и клиенту уйдёт фраза про
+            # сумму, при которой решение на самом деле не меняется.
+            shown = max(MIN_AMOUNT, math.floor(best / 100.0) * 100)
+            probe["amount"] = shown
             final = score(probe)
+            if SEVERITY[final["decision"]["action"]] >= base_rank:
+                shown = best
+                probe["amount"] = shown
+                final = score(probe)
+
             found.append({
                 "field": "amount",
                 "from": amount,
-                "to": round(best, -2),
+                "to": round(shown, 2),
                 "action_from": base_action,
-                "action_to": best_action,
+                "action_to": final["decision"]["action"],
                 "p_from": base["p_fraud"],
                 "p_to": final["p_fraud"],
-                "text": _text("amount", round(best, -2)),
+                "text": _text("amount", round(shown)),
             })
 
     # Сначала те, что смягчают сильнее; при равенстве — где ниже вероятность

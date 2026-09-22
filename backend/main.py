@@ -19,8 +19,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 import joblib
-import numpy as np
 import pandas as pd
+from numpy import cumsum as np_cumsum
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -32,6 +32,7 @@ from backend.cost import (
     ACTIONS,
     ALLOW,
     BLOCK,
+    HOLD,
     DEFAULT_ECONOMICS,
     Economics,
     decide,
@@ -278,23 +279,41 @@ def api_score(payload: TransactionIn) -> dict:
 
 
 @app.post("/api/counterfactual")
-def api_counterfactual(payload: TransactionIn) -> dict:
+def api_counterfactual(payload: SequenceIn) -> dict:
     """Что должно было измениться, чтобы система решила мягче.
 
     SHAP отвечает «почему так решили», контрфакт — «а что надо было иначе».
-    Второй вопрос оператору и клиенту нужен чаще. Считается отдельной ручкой:
-    каждый кандидат прогоняется через полный тракт, и на горячем пути
-    авторизации этому делать нечего.
+    Второй вопрос оператору и клиенту нужен чаще.
+
+    Принимает всю серию, а не одну операцию, и считает контрфакты для
+    последней. Это не удобство вызова, а условие правильности: в серии
+    подозрение накапливается, и решение по третьей покупке подряд принято с
+    учётом двух предыдущих. Контрфакт, посчитанный по одной операции в
+    отрыве от серии, объяснял бы другое решение — на тихой краже карты так и
+    выходило: разбор показывал «задержать» при вероятности 0.85, а контрфакт
+    рассуждал про «подтвердить» при 0.03.
+
+    Считается отдельной ручкой: каждый кандидат прогоняется через полный
+    тракт, и на горячем пути авторизации этому делать нечего.
     """
-    tx = payload.model_dump()
-    econ = _economics_from(tx.pop("economics", None))
-    tx = _resolve_defaults(tx)
+    econ = _economics_from(payload.economics)
+    sandbox = STATE["store"].sandbox()
+
+    # Прокручиваем серию до последней операции, чтобы состояние совпало с тем,
+    # в котором принималось объясняемое решение
+    items = [_resolve_defaults(item.model_dump(exclude={"economics"}))
+             for item in payload.transactions]
+    for tx in items[:-1]:
+        score_transaction(tx, econ, store=sandbox)
+        sandbox.observe(tx)
+
+    target = items[-1]
 
     def scorer(candidate: dict) -> dict:
-        return score_transaction(_resolve_defaults(dict(candidate)), econ)
+        return score_transaction(_resolve_defaults(dict(candidate)), econ, store=sandbox)
 
-    baseline = scorer(tx)
-    result = find_counterfactuals(tx, scorer, baseline)
+    baseline = scorer(target)
+    result = find_counterfactuals(target, scorer, baseline)
     result["baseline"] = {
         "action": baseline["decision"]["action"],
         "p_fraud": baseline["p_fraud"],
@@ -376,6 +395,109 @@ def api_report() -> dict:
 def api_bench() -> dict:
     """Замер задержки по этапам. Собирается командой `python -m ml.bench`."""
     return STATE.get("bench") or {}
+
+
+@app.get("/api/capacity")
+def api_capacity(
+    call_minutes: float = Query(6.0, gt=0, le=60),
+    shift_hours: float = Query(8.0, gt=0, le=24),
+    operators: int = Query(0, ge=0, le=500),
+) -> dict:
+    """Сколько операторов нужно под ту политику, которую выбрала система.
+
+    Стоимостная модель считает звонок оператора статьёй расходов в полторы
+    тысячи тенге и на этом останавливается. Но оператор — это человек в смене,
+    а не строка в смете: политика, которая назначает четыреста звонков в сутки,
+    требует конкретного числа людей, и если их нет, звонки просто не случатся.
+
+    Здесь считается три вещи: сколько звонков порождает политика, сколько людей
+    под это нужно, и — главное — что делать, если людей меньше. Последнее не
+    очевидно: при нехватке мощности звонки надо ставить в очередь не по
+    времени поступления, а по ожидаемой выгоде. Операция, где звонок экономит
+    девятьсот тысяч, должна обойти ту, где он экономит восемь тысяч, даже если
+    пришла позже.
+    """
+    feed: pd.DataFrame = STATE["feed"]
+    store = STATE["store"]
+    econ = STATE["economics"]
+    classes = STATE["type_classes"]
+
+    holds = feed[feed["action"] == HOLD]
+    if holds.empty:
+        return {"holds": 0}
+
+    # Ожидаемая выгода каждого звонка — из той же стоимостной модели
+    savings = []
+    for row in holds.to_dict("records"):
+        type_probs = {c: float(row.get(f"p_{c}", 0.0)) for c in classes}
+        costs = expected_costs(
+            float(row["p_fraud"]), float(row["amount"]), str(row["tx_type"]),
+            type_probs, store.client_summary(str(row["client_id"])), econ,
+        )
+        savings.append(max(costs[ALLOW] - costs[HOLD], 0.0))
+
+    holds = holds.assign(saving=savings)
+    days = max((feed["timestamp"].max() - feed["timestamp"].min()).days, 1)
+    per_day = len(holds) / days
+
+    by_hour = holds["timestamp"].dt.hour.value_counts().sort_index()
+    peak_hour = int(by_hour.idxmax())
+    peak_per_hour = float(by_hour.max() / days)
+
+    # Сколько людей нужно: по среднему потоку и по пиковому часу
+    calls_per_operator_shift = shift_hours * 60.0 / call_minutes
+    needed_average = per_day / calls_per_operator_shift
+    needed_peak = peak_per_hour / (60.0 / call_minutes)
+
+    # Кривая покрытия. Ось — доля звонков, а не число операторов: при нашем
+    # потоке один человек закрывает всё, и кривая по операторам выродилась бы
+    # в две точки. Доля же показывает то, ради чего кривая нужна: насколько
+    # выгода сосредоточена в верхушке очереди. Если девяносто процентов денег
+    # лежит в десяти процентах звонков, то при любой нехватке людей понятно,
+    # что делать — звонить по убыванию ожидаемой выгоды, а не по очереди.
+    ordered = sorted(savings, reverse=True)
+    total_saving = sum(ordered) or 1.0
+    running = np_cumsum(ordered)
+    capacity_curve = []
+    for step in range(0, 11):
+        share = step / 10.0
+        calls = int(round(share * len(ordered)))
+        captured = float(running[calls - 1]) if calls else 0.0
+        capacity_curve.append({
+            "share_of_calls": share,
+            "calls": calls,
+            "share_of_value": captured / total_saving,
+            "operators": round(calls / max(days, 1) / calls_per_operator_shift, 2),
+        })
+
+    # Пересчёт на объём кейса: тестовый период — только часть месяца
+    monthly_factor = 100_000 / max(len(feed), 1)
+
+    result = {
+        "holds": int(len(holds)),
+        "days": int(days),
+        "monthly_calls": int(round(len(holds) * monthly_factor)),
+        "monthly_operators": round(
+            len(holds) * monthly_factor / 30.0 / calls_per_operator_shift, 2),
+        "monthly_saving": round(sum(savings) * monthly_factor, 2),
+        "calls_per_day": round(per_day, 1),
+        "peak_hour": peak_hour,
+        "peak_calls_per_hour": round(peak_per_hour, 1),
+        "call_minutes": call_minutes,
+        "shift_hours": shift_hours,
+        "calls_per_operator_shift": round(calls_per_operator_shift, 1),
+        "operators_needed_average": round(needed_average, 2),
+        "operators_needed_peak": round(needed_peak, 2),
+        "total_expected_saving": round(sum(savings), 2),
+        "saving_per_call": round(sum(savings) / len(savings), 2),
+        "by_hour": [{"hour": int(h), "calls": round(float(c) / days, 2)}
+                    for h, c in by_hour.items()],
+        "capacity_curve": capacity_curve,
+    }
+    if operators:
+        point = min(capacity_curve, key=lambda c: abs(c["operators"] - operators))
+        result["selected"] = point
+    return result
 
 
 @app.get("/api/drift")

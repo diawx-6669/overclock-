@@ -35,6 +35,7 @@ GET_PATHS = [
     "/api/report",
     "/api/bench",
     "/api/drift",
+    "/api/capacity",
     "/api/economics",
     "/api/graph?min_clients=3&limit=6",
     "/api/map",
@@ -71,14 +72,12 @@ def collect(client) -> dict:
         bundle["posts"].append({
             "path": "/api/score-sequence", "body": body, "result": sequence,
         })
-        # Интерфейс спрашивает контрфакты для той транзакции, которую вернул
-        # скоринг, а она уже дозаполнена значениями по умолчанию. Если взять
-        # исходную запись пресета, тела запросов не совпадут и витрина
-        # решит, что ответа нет.
-        last = sequence["steps"][-1]["transaction"]
+        # Контрфакты считаются по всей серии: решение по последней операции
+        # принято с учётом предыдущих, и объяснять его в отрыве от них нельзя.
+        # Тело запроса совпадает с телом скоринга — интерфейс шлёт то же самое.
         bundle["posts"].append({
-            "path": "/api/counterfactual", "body": last,
-            "result": client.post("/api/counterfactual", json=last).json(),
+            "path": "/api/counterfactual", "body": body,
+            "result": client.post("/api/counterfactual", json=body).json(),
         })
     return bundle
 
