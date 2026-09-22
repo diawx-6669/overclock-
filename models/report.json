@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-19T19:26:47.881231+00:00",
+  "generated_at": "2026-09-22T18:27:27.359058+00:00",
   "ablation": {
     "rows_test": 25000,
     "variants": [
@@ -31,7 +31,7 @@
       "component_size"
     ]
   },
-  "elapsed_seconds": 38.4,
+  "elapsed_seconds": 57.6,
   "cap_sweep": {
     "alert_budget": 0.02,
     "seeds": [
@@ -220,5 +220,46 @@
       "valid": 15000,
       "test": 25000
     }
+  },
+  "sensitivity": {
+    "rows": 25000,
+    "variants": [
+      {
+        "parameter": "эффективность действий −25%",
+        "changed_share": 0.00796,
+        "regret_share": 0.002969065972999608,
+        "regret_absolute": 48638.54
+      },
+      {
+        "parameter": "эффективность действий +25%",
+        "changed_share": 0.00856,
+        "regret_share": 0.03425363750036544,
+        "regret_absolute": 110788.0
+      },
+      {
+        "parameter": "разбор случая ×2",
+        "changed_share": 0.00592,
+        "regret_share": 0.0008950853870889706,
+        "regret_absolute": 7508.71
+      },
+      {
+        "parameter": "звонок оператора ×2",
+        "changed_share": 0.00264,
+        "regret_share": 0.006668403301791165,
+        "regret_absolute": 56090.61
+      },
+      {
+        "parameter": "риск ухода после блокировки ×2",
+        "changed_share": 0.00064,
+        "regret_share": 0.005124576883644739,
+        "regret_absolute": 41037.89
+      },
+      {
+        "parameter": "невозвратность перевода 0.92 -> 0.70",
+        "changed_share": 0.00228,
+        "regret_share": 0.0027822640434808873,
+        "regret_absolute": 19082.59
+      }
+    ]
   }
 }

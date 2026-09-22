@@ -29,6 +29,7 @@ import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import average_precision_score, precision_recall_curve, roc_auc_score
 
+from backend.cost import ALLOW, Economics, decide, expected_costs
 from ml.anomaly import ANOMALY_FEATURES, AnomalyChannel, NoisyOr
 from ml.common import FRAUD_TYPES, read_transactions
 from ml.features import FEATURES, build_matrix
@@ -275,7 +276,109 @@ def step_novel(ctx: Context) -> dict:
     }
 
 
-STEPS = {"ablation": step_ablation, "caps": step_caps, "novel": step_novel}
+def step_sensitivity(ctx: Context) -> dict:
+    """Насколько решения держатся, если стоимостная модель задана неточно.
+
+    Матрица эффективности действий взята из отраслевых оценок: измерить её на
+    своём потоке можно только A/B-тестом, которого у нас нет. Честный ответ на
+    это возражение — не оправдание, а замер устойчивости. Если решения не
+    меняются при ошибке в матрице на четверть, то спор о том, 85 там процентов
+    или 80, не стоит выеденного яйца. Если меняются — значит параметр
+    критический, и его надо измерять в первую очередь.
+
+    Гоняем по уже размеченному тестовому срезу: перевычислять модель не нужно,
+    меняется только экономика.
+    """
+    print("Устойчивость решений к ошибке в стоимостной модели…")
+    scored = read_transactions("data/scored_test.csv")
+    classes = sorted({c.replace("p_", "") for c in scored.columns
+                      if c.startswith("p_") and c != "p_fraud"})
+
+    rows = scored.to_dict("records")
+    base_econ = Economics()
+
+    def choose(econ: Economics) -> list[str]:
+        out = []
+        for r in rows:
+            tp = {c: float(r.get(f"p_{c}", 0.0)) for c in classes}
+            out.append(decide(float(r["p_fraud"]), float(r["amount"]),
+                              str(r["tx_type"]), tp, None, econ).action)
+        return out
+
+    def evaluate(actions: list[str], econ: Economics) -> float:
+        """Ожидаемые потери от этих решений в мире с такой экономикой.
+
+        Сравниваем именно ожидаемые, а не фактические. Правило выбирает
+        действие по ожидаемым потерям, поэтому и сравнивать его с идеальным
+        правилом нужно в той же величине — иначе сравнение теряет смысл.
+        На фактических исходах конечной выборки нашему правилу может просто
+        повезти, и «цена ошибки» выходит отрицательной, чего не бывает:
+        идеальное правило по определению не хуже. Первый прогон дал как раз
+        такие минусы, и это был признак неверно поставленного вопроса.
+        """
+        total = 0.0
+        for a, r in zip(actions, rows):
+            tp = {c: float(r.get(f"p_{c}", 0.0)) for c in classes}
+            costs = expected_costs(float(r["p_fraud"]), float(r["amount"]),
+                                   str(r["tx_type"]), tp, None, econ)
+            total += costs[a]
+        return total
+
+    base_actions = choose(base_econ)
+
+    def perturbed(name: str, mutate) -> dict:
+        """Цена нашей ошибки, а не разница миров.
+
+        Наивное сравнение — «сколько мы потеряем, если параметр другой» —
+        меряет не то. Если действия правда работают на четверть хуже, потери
+        вырастут при любой политике, и к качеству наших решений это отношения
+        не имеет. Спрашивать надо иначе: мы решали по неверной матрице, а мир
+        оказался другим — насколько наши решения хуже тех, что приняли бы,
+        зная правду. Эта разница и есть цена ошибки в параметре.
+        """
+        true_econ = Economics()
+        mutate(true_econ)
+        true_actions = choose(true_econ)
+
+        # оба набора решений оцениваем в одном и том же, настоящем мире
+        cost_ours = evaluate(base_actions, true_econ)
+        cost_ideal = evaluate(true_actions, true_econ)
+        changed = sum(1 for a, b in zip(base_actions, true_actions) if a != b)
+        return {
+            "parameter": name,
+            "changed_share": changed / len(base_actions),
+            "regret_share": (cost_ours - cost_ideal) / cost_ideal if cost_ideal else 0.0,
+            "regret_absolute": round(cost_ours - cost_ideal, 2),
+        }
+
+    def scale_effectiveness(econ: Economics, factor: float) -> None:
+        for action, table in econ.effectiveness.items():
+            if action == ALLOW:
+                continue
+            for kind in table:
+                table[kind] = float(min(0.99, max(0.0, table[kind] * factor)))
+
+    variants = [
+        perturbed("эффективность действий −25%", lambda e: scale_effectiveness(e, 0.75)),
+        perturbed("эффективность действий +25%", lambda e: scale_effectiveness(e, 1.25)),
+        perturbed("разбор случая ×2", lambda e: setattr(e, "case_handling_cost",
+                                                        e.case_handling_cost * 2)),
+        perturbed("звонок оператора ×2", lambda e: setattr(e, "hold_op_cost",
+                                                           e.hold_op_cost * 2)),
+        perturbed("риск ухода после блокировки ×2",
+                  lambda e: setattr(e, "block_churn_rate", e.block_churn_rate * 2)),
+        perturbed("невозвратность перевода 0.92 -> 0.70",
+                  lambda e: setattr(e, "lgd_transfer", 0.70)),
+    ]
+    for v in variants:
+        print(f"  {v['parameter']:<36} решений изменилось {v['changed_share']:>5.1%}"
+              f"   цена ошибки {v['regret_share']:>6.2%}")
+
+    return {"sensitivity": {"rows": int(len(rows)), "variants": variants}}
+
+
+STEPS = {"ablation": step_ablation, "caps": step_caps,
+         "novel": step_novel, "sensitivity": step_sensitivity}
 
 
 def run_in_subprocesses(args) -> dict:
@@ -337,7 +440,8 @@ def main() -> None:
     report["elapsed_seconds"] = round(time.time() - t0, 1)
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2),
                               encoding="utf-8")
-    have = [k for k in ("ablation", "cap_sweep", "novel_scheme") if k in report]
+    have = [k for k in ("ablation", "cap_sweep", "novel_scheme", "sensitivity")
+            if k in report]
     print(f"\nСохранено: {args.out}  разделы: {', '.join(have) or 'нет'}"
           f"  (за {report['elapsed_seconds']:.0f} с)")
 

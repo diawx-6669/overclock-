@@ -36,6 +36,7 @@ GET_PATHS = [
     "/api/bench",
     "/api/drift",
     "/api/capacity",
+    "/api/walkforward",
     "/api/economics",
     "/api/graph?min_clients=3&limit=6",
     "/api/map",

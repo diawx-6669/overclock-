@@ -152,3 +152,42 @@ def test_offline_matches_online():
     for i, row in enumerate(stream):
         for f in FEATURES:
             assert row[f] == pytest.approx(batch.iloc[i][f]), f"строка {i}, признак {f}"
+
+
+def test_ring_without_shared_device_or_ip_is_still_found():
+    """Кольцо ловится не только по общему устройству и IP.
+
+    Аккуратная группа заходит с разных телефонов и разных адресов — попарные
+    счётчики её не видят. Но деньги всё равно сходятся в одну точку, и связная
+    компонента графа «клиент — устройство — IP — получатель» объединяет её
+    через получателя.
+    """
+    store = FeatureStore()
+    for i in range(8):
+        store.observe(_tx(client_id=f"K{i}", device_id=f"DEV{i}",
+                          ip=f"10.0.{i}.1", tx_type="transfer",
+                          recipient_id="RDROP", timestamp=f"2025-09-10 1{i}:00:00"))
+
+    feats = store.features(_tx(client_id="K3", device_id="DEV3", ip="10.0.3.1",
+                               tx_type="transfer", recipient_id="RDROP",
+                               timestamp="2025-09-10 20:00:00"))
+    assert feats["clients_per_device"] == 1
+    assert feats["clients_per_ip"] == 1
+    assert feats["component_clients"] == 8
+    assert feats["recipient_clients_24h"] == 8
+
+
+def test_component_follows_transitive_chains():
+    """A делит устройство с B, B выходит с того же IP, что C.
+
+    Попарные счётчики видят только соседа, компонента — всю цепочку. Ради
+    этого union-find и добавлялся.
+    """
+    store = FeatureStore()
+    store.observe(_tx(client_id="A", device_id="SHARED", ip="1.1.1.1"))
+    store.observe(_tx(client_id="B", device_id="SHARED", ip="2.2.2.2"))
+    store.observe(_tx(client_id="C", device_id="DEV_C", ip="2.2.2.2"))
+
+    feats = store.features(_tx(client_id="A", device_id="SHARED", ip="1.1.1.1"))
+    assert feats["clients_per_device"] == 2      # видит только B
+    assert feats["component_clients"] == 3       # видит всю цепочку

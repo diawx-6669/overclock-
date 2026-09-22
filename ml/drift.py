@@ -42,6 +42,13 @@ DATA_DIR = Path("data")
 PSI_MODERATE = 0.10
 PSI_SIGNIFICANT = 0.25
 
+# Порог расхождения калибровки. Если предсказанная доля фрода расходится с
+# фактической больше чем на это, стоимостная модель считает ожидаемые потери
+# по неверной вероятности, и все решения смещаются разом. Величина взята от
+# базовой частоты фрода: расхождение в треть от неё уже меняет выбор действия
+# на пограничных операциях.
+CALIBRATION_GAP = 0.006
+
 # Накопительные признаки. Они растут по ходу потока просто потому, что у
 # клиента со временем прибавляется истории: устройство «стареет», список
 # операций удлиняется, компонента графа обрастает связями. Между началом и
@@ -118,12 +125,68 @@ def calibration_by_period(
     return out
 
 
+def gate(report: dict) -> dict:
+    """Решение контура: можно ли доверять модели дальше.
+
+    Без этой функции мониторинг остаётся отчётом, который кто-то должен
+    прочитать. Контур управления отличается тем, что у него есть выход:
+    срабатывает — значит модель нельзя катить дальше без переобучения.
+
+    Накопительные признаки в решение не входят: их сдвиг заложен в
+    устройство системы, и останавливать из-за него выпуск бессмысленно.
+    """
+    reasons: list[dict] = []
+
+    shifted = [r for r in report.get("feature_psi", [])
+               if not r["accumulating"] and r["verdict"] == "significant"]
+    if shifted:
+        reasons.append({
+            "kind": "data_shift",
+            "features": [r["feature"] for r in shifted][:5],
+            "text": {
+                "ru": f"Значимо сдвинулись признаки: {', '.join(r['feature'] for r in shifted[:5])}. "
+                      "Модель видит не тот поток, на котором училась.",
+                "kk": f"Белгілер елеулі жылжыды: {', '.join(r['feature'] for r in shifted[:5])}.",
+                "en": f"Significant shift in: {', '.join(r['feature'] for r in shifted[:5])}. "
+                      "The model is seeing a different stream than it learned on.",
+            },
+        })
+
+    worst = max((abs(c["gap"]) for c in report.get("calibration", [])), default=0.0)
+    if worst > CALIBRATION_GAP:
+        reasons.append({
+            "kind": "calibration",
+            "gap": worst,
+            "text": {
+                "ru": f"Предсказанная доля фрода расходится с фактической на {worst:.4f}. "
+                      "Стоимостная модель считает потери по неверной вероятности.",
+                "kk": f"Болжанған және нақты алаяқтық үлесі {worst:.4f} айырмашылықта.",
+                "en": f"Predicted fraud share diverges from actual by {worst:.4f}. "
+                      "The cost model is pricing losses off a wrong probability.",
+            },
+        })
+
+    ok = not reasons
+    return {
+        "ok": ok,
+        "verdict": "ok" if ok else "retrain",
+        "reasons": reasons,
+        "calibration_gap_worst": worst,
+        "calibration_gap_threshold": CALIBRATION_GAP,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Мониторинг дрейфа")
     parser.add_argument("--data", default=str(DATA_DIR / "transactions.csv"))
     parser.add_argument("--profiles", default=str(DATA_DIR / "clients.csv"))
     parser.add_argument("--scored", default=str(DATA_DIR / "scored_test.csv"))
     parser.add_argument("--out", default=str(MODELS_DIR / "drift.json"))
+    parser.add_argument(
+        "--fail-on-drift", action="store_true",
+        help="вернуть ненулевой код выхода при срабатывании контура "
+             "(для сборки: не катить модель, которой нельзя доверять)",
+    )
     args = parser.parse_args()
 
     MODELS_DIR.mkdir(exist_ok=True)
@@ -185,9 +248,22 @@ def main() -> None:
             print(f"  {c['period']}  n={c['count']:>6,}  предсказано {c['predicted']:.4f}"
                   f"  фактически {c['actual']:.4f}  расхождение {c['gap']:+.4f}")
 
+    report["gate"] = gate(report)
+
+    print("\nКонтур управления")
+    if report["gate"]["ok"]:
+        print("  модели можно доверять: значимых сдвигов нет, "
+              f"калибровка расходится не больше чем на {CALIBRATION_GAP}")
+    else:
+        for r in report["gate"]["reasons"]:
+            print(f"  ТРЕБУЕТСЯ ПЕРЕОБУЧЕНИЕ: {r['text']['ru']}")
+
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2),
                               encoding="utf-8")
     print(f"\nСохранено: {args.out}")
+
+    if args.fail_on_drift and not report["gate"]["ok"]:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

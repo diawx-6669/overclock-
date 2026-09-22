@@ -102,6 +102,11 @@ def load_artifacts() -> None:
         json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
     )
 
+    wf_path = MODELS_DIR / "walkforward.json"
+    STATE["walkforward"] = (
+        json.loads(wf_path.read_text(encoding="utf-8")) if wf_path.exists() else {}
+    )
+
     drift_path = MODELS_DIR / "drift.json"
     STATE["drift"] = (
         json.loads(drift_path.read_text(encoding="utf-8")) if drift_path.exists() else {}
@@ -395,6 +400,15 @@ def api_report() -> dict:
 def api_bench() -> dict:
     """Замер задержки по этапам. Собирается командой `python -m ml.bench`."""
     return STATE.get("bench") or {}
+
+
+@app.get("/api/walkforward")
+def api_walkforward() -> dict:
+    """Скользящая валидация: метрики по складкам с разбросом.
+
+    Собирается командой `python -m ml.walkforward`.
+    """
+    return STATE.get("walkforward") or {}
 
 
 @app.get("/api/capacity")

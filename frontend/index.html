@@ -178,13 +178,22 @@
   @media (prefers-reduced-motion: reduce){
     .tick-row{animation:none} .tick-head .live{animation:none}
   }
+  @media (max-width:620px){
+    /* Значок действия не сжимается: «Задержать и позвонить» держит свою
+       ширину, и строка вылезает за экран. Причём только та строка, где такое
+       действие выпало, — из-за чего переполнение то появлялось, то исчезало.
+       Время и причину на узком экране убираем, действие и сумму оставляем. */
+    .tick-row{gap:9px;font-size:12px;padding:8px 0}
+    .tick-row .c, .tick-row .w{display:none}
+    .tick-row .a{flex:1;text-align:left}
+  }
 
   /* ---------- показатели ----------
      Не карточки: колонки, разделённые волосяной линией. Шесть одинаковых
      плашек с рамками читаются как шесть отдельных объектов, хотя это один
      ряд однородных чисел. */
   .kpis{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(min(168px,100%),1fr));
     gap:0;margin:24px 0 8px;border-top:1px solid var(--line);
   }
   .kpi{padding:16px 20px 16px 0;border-right:1px solid var(--line-soft)}
@@ -459,6 +468,20 @@ const I18N = {
     cap2_x:"доля звонков, отсортированных по ожидаемой выгоде",
     cap2_top:"верхние",
     cap2_note:"Выгода сосредоточена в верхушке очереди: верхние 20% звонков несут {v} всех сэкономленных денег. Это и есть ответ на нехватку людей — звонить по убыванию ожидаемой выгоды, а не по времени поступления. Пунктир показал бы равномерное распределение.",
+    wf_h:"Скользящая валидация по времени",
+    wf_sub:"Одно разбиение даёт одно число, и проверить его нечем. Здесь окно обучения расширяется, окно проверки едет вперёд, и каждый сдвиг — независимый замер. Ни одна складка не подглядывает в будущее.",
+    wf_fold:"Складка",
+    wf_window:"Проверочное окно",
+    wf_train:"Обучение",
+    wf_fraud:"Фрода",
+    wf_median:"медиана и разброс",
+    wf_note:"В проверочные окна попало {n} фродовых операций против одного окна в обычном разбиении. Именно поэтому долям по кольцам теперь можно верить: раньше их считали по 32 операциям, и любая оценка болталась на пятнадцать пунктов.",
+    sens_h:"Что будет, если стоимостная модель задана неточно",
+    sens_sub:"Матрица эффективности действий взята из отраслевых оценок: измерить её на своём потоке можно только A/B-тестом. Честный ответ на это — не оправдание, а замер устойчивости.",
+    sens_param:"Что меняем",
+    sens_changed:"Решений изменилось",
+    sens_regret:"Цена ошибки",
+    sens_note:"«Цена ошибки» — насколько наши решения хуже тех, что мы приняли бы, зная правду. Считается в ожидаемых потерях, а не в фактических: правило выбирает действие по ожидаемым, и сравнивать его с идеальным нужно в той же величине. Даже при ошибке в матрице на четверть меняется меньше процента решений, а цена ошибки не превышает 3.5%. Спор о том, 85 там процентов или 80, на выбор действия почти не влияет.",
     channels:"Два независимых канала",
     ch_supervised:"по разметке",
     ch_anomaly:"аномальность",
@@ -605,6 +628,20 @@ const I18N = {
     cap2_x:"күтілетін пайда бойынша сұрыпталған қоңыраулар үлесі",
     cap2_top:"жоғарғы",
     cap2_note:"Пайда кезектің басында шоғырланған: жоғарғы 20% қоңырау барлық үнемделген ақшаның {v} әкеледі.",
+    wf_h:"Уақыт бойынша жылжымалы валидация",
+    wf_sub:"Бір бөлу бір сан береді, оны тексеретін ештеңе жоқ. Мұнда оқыту терезесі кеңейеді, тексеру терезесі алға жылжиды.",
+    wf_fold:"Бүктеме",
+    wf_window:"Тексеру терезесі",
+    wf_train:"Оқыту",
+    wf_fraud:"Алаяқтық",
+    wf_median:"медиана және шашырау",
+    wf_note:"Тексеру терезелеріне {n} алаяқтық операциясы түсті.",
+    sens_h:"Шығын моделі дәл берілмесе не болады",
+    sens_sub:"Әрекеттер тиімділігінің матрицасы салалық бағалаулардан алынған.",
+    sens_param:"Нені өзгертеміз",
+    sens_changed:"Шешім өзгерді",
+    sens_regret:"Қате бағасы",
+    sens_note:"«Қате бағасы» — біздің шешімдеріміз шындықты білгендегі шешімдерден қаншалықты нашар. Матрицадағы төрттен бір қате кезінде де шешімдердің бір пайызынан азы өзгереді.",
     channels:"Екі тәуелсіз арна",
     ch_supervised:"белгілеу бойынша",
     ch_anomaly:"ауытқу",
@@ -751,6 +788,20 @@ const I18N = {
     cap2_x:"share of calls, sorted by expected value",
     cap2_top:"top",
     cap2_note:"Value concentrates at the head of the queue: the top 20% of calls carry {v} of all money saved. That is the answer to being short-staffed — call in descending order of expected value, not by arrival time. The dashed line would mean an even spread.",
+    wf_h:"Walk-forward validation",
+    wf_sub:"A single split gives a single number with nothing to check it against. Here the training window expands, the test window rolls forward, and each shift is an independent measurement. No fold peeks into the future.",
+    wf_fold:"Fold",
+    wf_window:"Test window",
+    wf_train:"Training",
+    wf_fraud:"Fraud",
+    wf_median:"median and spread",
+    wf_note:"The test windows together contain {n} fraudulent transactions, against a single window in an ordinary split. That is why the per-scheme shares can now be trusted: they used to rest on 32 transactions, where any estimate swung by fifteen points.",
+    sens_h:"What if the cost model is imprecise",
+    sens_sub:"The effectiveness matrix comes from industry estimates; measuring it on your own stream needs an A/B test. The honest answer to that is not an excuse but a robustness measurement.",
+    sens_param:"Perturbation",
+    sens_changed:"Decisions changed",
+    sens_regret:"Cost of being wrong",
+    sens_note:"“Cost of being wrong” is how much worse our decisions are than the ones we would have made knowing the truth. It is measured in expected loss, not realised: the rule picks actions by expected cost, so it must be compared to the ideal rule in the same quantity. Even with the matrix off by a quarter, under one percent of decisions change and the cost of the error stays under 3.5%.",
     channels:"Two independent channels",
     ch_supervised:"from labels",
     ch_anomaly:"anomaly",
@@ -1053,7 +1104,7 @@ async function viewDashboard(root){
   root.appendChild(p1);
 
   /* решения и типы */
-  const two=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(380px,1fr));margin-top:14px"});
+  const two=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));margin-top:14px"});
   const pA=el("div",{class:"panel"},el("h3",{},T("actions_h")),el("p",{class:"sub"},T("actions_sub")));
   pA.appendChild(barsH(
     ["allow","step_up","hold","block"].map(a=>({label:T(a),value:st.actions[a]||0,color:ACT_COLOR[a]})),
@@ -1105,7 +1156,7 @@ async function viewDashboard(root){
   root.appendChild(pM);
 
   /* калибровка и важность */
-  const two2=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(380px,1fr));margin-top:14px"});
+  const two2=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));margin-top:14px"});
   const pR=el("div",{class:"panel"},el("h3",{},T("rel_h")),el("p",{class:"sub"},T("rel_sub")));
   pR.appendChild(reliabilityChart(mt.reliability||[]));
   two2.appendChild(pR);
@@ -1244,7 +1295,7 @@ function renderStep(step, idx, total, transactions){
     T("res_kind")+": "+T(step.dominant_kind)));
   wrap.appendChild(head);
 
-  const cols=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px;margin-top:10px"});
+  const cols=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(min(310px,100%),1fr));gap:18px;margin-top:10px"});
 
   const c1=el("div",{});
   c1.appendChild(el("h3",{},T("res_p")));
@@ -1278,7 +1329,7 @@ function renderStep(step, idx, total, transactions){
   cols.appendChild(c2);
   wrap.appendChild(cols);
 
-  const cols2=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:18px;margin-top:16px"});
+  const cols2=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(min(310px,100%),1fr));gap:18px;margin-top:16px"});
   const c3=el("div",{});
   c3.appendChild(el("h3",{},T("res_why")));
   c3.appendChild(renderReasons(step.reasons));
@@ -1361,7 +1412,7 @@ async function runSequence(transactions, out){
 }
 
 function manualForm(ref, presets){
-  const box=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px"});
+  const box=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(min(168px,100%),1fr));gap:12px"});
   const base=presets[0].sequence[0];
   const mk=(key,label,node)=>{ const d=el("div",{}); d.appendChild(el("label",{},label)); d.appendChild(node);
     node.dataset.k=key; return d; };
@@ -1824,7 +1875,7 @@ async function viewModel(root){
   root.appendChild(pA);
 
   /* кривая обучения */
-  const two=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-top:14px"});
+  const two=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:14px;margin-top:14px"});
   const pC=el("div",{class:"panel"},el("h3",{},T("curve_h2")),el("p",{class:"sub"},T("curve_sub2")));
   pC.appendChild(trainingCurve(mt.training_curve||{}));
   two.appendChild(pC);
@@ -1848,6 +1899,61 @@ async function viewModel(root){
   } else pB.appendChild(el("div",{class:"dim"},T("no_report")));
   two.appendChild(pB);
   root.appendChild(two);
+
+  /* скользящая валидация */
+  let wf={};
+  try{ wf = await cached("walkforward","/api/walkforward"); }catch(_){}
+  if(wf.summary){
+    const sm=wf.summary;
+    const pW=el("div",{class:"panel",style:"margin-top:14px"},
+      el("h3",{},T("wf_h")), el("p",{class:"sub"},T("wf_sub")));
+    const t=el("table",{});
+    t.appendChild(el("thead",{},el("tr",{},
+      el("th",{},T("wf_fold")), el("th",{},T("wf_window")),
+      el("th",{class:"num"},T("wf_train")), el("th",{class:"num"},T("wf_fraud")),
+      el("th",{class:"num"},"PR-AUC"), el("th",{class:"num"},T("abl_r90")))));
+    const tb=el("tbody",{});
+    (wf.folds_detail||[]).forEach(f=>tb.appendChild(el("tr",{},
+      el("td",{class:"mono"},String(f.fold)),
+      el("td",{class:"dim",style:"font-size:12px"},f.test_from+" — "+f.test_to),
+      el("td",{class:"num mono dim"},nf(f.rows_train)),
+      el("td",{class:"num mono dim"},f.fraud_in_test),
+      el("td",{class:"num mono"},f.pr_auc.toFixed(4)),
+      el("td",{class:"num mono"},f.recall_at_precision90.toFixed(3)))));
+    tb.appendChild(el("tr",{style:"border-top:1px solid var(--line)"},
+      el("td",{style:"font-weight:600"},T("wf_median")), el("td",{}),
+      el("td",{class:"num"}), el("td",{class:"num mono dim"},sm.fraud_total_in_tests),
+      el("td",{class:"num mono",style:"font-weight:700"},
+        sm.pr_auc.median.toFixed(4)+"  ["+sm.pr_auc.min.toFixed(3)+"–"+sm.pr_auc.max.toFixed(3)+"]"),
+      el("td",{class:"num mono",style:"font-weight:700"},
+        sm.recall_at_precision90.median.toFixed(3))));
+    t.appendChild(tb);
+    const sc=el("div",{class:"scroll"}); sc.appendChild(t); pW.appendChild(sc);
+    pW.appendChild(el("div",{class:"note",style:"margin-top:14px"},
+      T("wf_note").replace("{n}", String(sm.fraud_total_in_tests))));
+    root.appendChild(pW);
+  }
+
+  /* устойчивость к ошибке в стоимостной модели */
+  const sens=rep.sensitivity;
+  if(sens){
+    const pS2=el("div",{class:"panel",style:"margin-top:14px"},
+      el("h3",{},T("sens_h")), el("p",{class:"sub"},T("sens_sub")));
+    const t=el("table",{});
+    t.appendChild(el("thead",{},el("tr",{},
+      el("th",{},T("sens_param")), el("th",{class:"num"},T("sens_changed")),
+      el("th",{class:"num"},T("sens_regret")))));
+    const tb=el("tbody",{});
+    sens.variants.forEach(v=>tb.appendChild(el("tr",{},
+      el("td",{},v.parameter),
+      el("td",{class:"num mono"},pct(v.changed_share,1)),
+      el("td",{class:"num mono",style:"color:"+(v.regret_share>0.05?"var(--block)":"var(--allow)")},
+        pct(v.regret_share,2)))));
+    t.appendChild(tb);
+    const sc=el("div",{class:"scroll"}); sc.appendChild(t); pS2.appendChild(sc);
+    pS2.appendChild(el("div",{class:"note",style:"margin-top:14px"},T("sens_note")));
+    root.appendChild(pS2);
+  }
 
   /* незнакомая схема — главный аргумент */
   const nv=rep.novel_scheme;
@@ -2057,7 +2163,7 @@ async function viewEconomics(root){
   catch(e){ root.appendChild(el("div",{class:"note"},T("err"))); return; }
 
   const panel=el("div",{class:"panel"});
-  const grid=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px"});
+  const grid=el("div",{class:"grid",style:"grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:18px"});
   const current=Object.assign({},SIM.econ||{});
 
   ECON_FIELDS.forEach(([key,label,min,max,step])=>{

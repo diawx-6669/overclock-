@@ -1,4 +1,4 @@
-.PHONY: install data train report bench drift run test all clean demo
+.PHONY: install data train report bench drift walkforward run test all clean demo
 
 install:
 	pip install -r requirements.txt
@@ -18,13 +18,16 @@ bench:
 drift:
 	python -m ml.drift
 
+walkforward:
+	python -m ml.walkforward
+
 run:
 	uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
 test:
 	python -m pytest tests -q
 
-all: install data train report bench drift
+all: install data train report bench drift walkforward
 
 demo:
 	python -m scripts.export_demo
