@@ -1,4 +1,7 @@
-# Fraud Hunter
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/logo.png">
+  <img src="docs/img/logo-light.png" alt="Fraud Hunter" width="380">
+</picture>
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/diawx-6669/overclock-)
 
