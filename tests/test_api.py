@@ -234,3 +234,69 @@ def test_bench_endpoint_is_safe_and_sane(client):
     # сумма этапов не может заметно превышать общее время
     parts = sum(v["p50"] for k, v in bench["stages"].items() if k != "всего")
     assert parts <= total["p50"] * 1.35
+
+
+# --------------------------------------------------------------------------
+# Диапазоны ползунков экономики
+# --------------------------------------------------------------------------
+
+
+def _econ_slider_ranges() -> dict[str, tuple[float, float, float]]:
+    """Достать из интерфейса границы ползунков экономики.
+
+    Читаем именно исходник страницы, а не копию значений в тесте: иначе тест
+    проверял бы сам себя. Формат строки в ECON_FIELDS фиксированный —
+    ["ключ", {подписи}, min, max, step].
+    """
+    import re
+
+    html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    block = re.search(r"const ECON_FIELDS=\[(.+?)\n\];", html, re.S)
+    assert block, "в интерфейсе не нашёлся список ECON_FIELDS"
+    out: dict[str, tuple[float, float, float]] = {}
+    for line in block.group(1).splitlines():
+        m = re.match(
+            r'\s*\["(\w+)",.*?\},\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\]', line
+        )
+        if m:
+            out[m.group(1)] = (float(m.group(2)), float(m.group(3)), float(m.group(4)))
+    assert out, "ECON_FIELDS разобрать не удалось"
+    return out
+
+
+def test_econ_sliders_cover_backend_defaults(client):
+    """Значение по умолчанию должно попадать внутрь диапазона ползунка."""
+    econ = client.get("/api/economics").json()
+    for key, (lo, hi, _step) in _econ_slider_ranges().items():
+        assert key in econ, f"ползунок {key} не соответствует ни одному параметру"
+        assert lo <= float(econ[key]) <= hi, f"{key}: значение по умолчанию вне шкалы"
+
+
+def test_call_cost_slider_reaches_the_point_where_calls_stop(client):
+    """Главный тезис проекта проверяемый руками.
+
+    В README сказано: поднимите стоимость звонка — и система перестанет
+    звонить. Если максимум ползунка ниже точки перелома, интерфейс физически
+    не может показать то, что написано в документации. Такую ошибку однажды
+    уже поймали на записи демо, поэтому граница теперь под тестом.
+    """
+    preset = next(p for p in client.get("/api/presets").json()["presets"]
+                  if p["key"] == "social_eng")
+    body = {"transactions": preset["sequence"]}
+
+    base = client.post("/api/score-sequence", json=body).json()
+    assert any(s["decision"]["action"] == "hold" for s in base["steps"]), (
+        "сценарий социальной инженерии перестал давать звонок — "
+        "пример для README нужно пересобрать"
+    )
+
+    lo, hi, step = _econ_slider_ranges()["hold_op_cost"]
+    # Ищем максимальное значение шкалы, на котором звонок ещё остаётся.
+    top = client.post(
+        "/api/score-sequence", json={**body, "economics": {"hold_op_cost": hi}}
+    ).json()
+    assert all(s["decision"]["action"] != "hold" for s in top["steps"]), (
+        f"на максимуме шкалы ({hi:.0f} ₸) система всё ещё звонит: "
+        "ползунок не дотягивается до перелома, обещанного в README"
+    )
+    assert step <= (hi - lo) / 20, "шаг ползунка слишком крупный для шкалы"

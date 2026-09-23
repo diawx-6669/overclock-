@@ -2147,7 +2147,7 @@ async function viewModel(root){
 /* ---------------------------------------------------------------- экономика */
 const ECON_FIELDS=[
   ["case_handling_cost",     {ru:"Разбор одного случая фрода",   kk:"Бір алаяқтық жағдайын талдау", en:"Handling one fraud case"},            0, 30000, 500],
-  ["hold_op_cost",           {ru:"Звонок оператора",              kk:"Оператор қоңырауы",            en:"Operator call"},                       0, 10000, 100],
+  ["hold_op_cost",           {ru:"Звонок оператора",              kk:"Оператор қоңырауы",            en:"Operator call"},                       0, 100000, 500],
   ["hold_friction_rate",     {ru:"Ущерб от задержки, доля суммы", kk:"Кідірістен зиян, сома үлесі",  en:"Delay damage, share of amount"},       0, 0.05, 0.001],
   ["step_up_friction_rate",  {ru:"Трение подтверждения, доля",    kk:"Растау кедергісі, үлес",       en:"Confirmation friction, share"},        0, 0.02, 0.0005],
   ["block_churn_rate",       {ru:"Риск ухода после блокировки",   kk:"Бұғаттаудан кейін кету қаупі", en:"Churn risk after a false block"},      0, 0.5,  0.01],
